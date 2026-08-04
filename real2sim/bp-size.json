@@ -1,0 +1,487 @@
+{
+  "static.prop.bin": [
+    0.55,
+    0.64,
+    1.06
+  ],
+  "static.prop.dirtdebris01": [
+    1.86,
+    1.51,
+    0.15
+  ],
+  "static.prop.streetbarrier": [
+    1.21,
+    0.37,
+    1.07
+  ],
+  "static.prop.trafficcone01": [
+    0.88,
+    0.88,
+    1.13
+  ],
+  "vehicle.audi.a2": [
+    3.71,
+    1.79,
+    1.55
+  ],
+  "vehicle.audi.etron": [
+    4.86,
+    2.03,
+    1.65
+  ],
+  "vehicle.audi.tt": [
+    4.18,
+    1.99,
+    1.39
+  ],
+  "vehicle.bh.crossbike": [
+    1.51,
+    0.87,
+    1.61
+  ],
+  "vehicle.bmw.grandtourer": [
+    4.61,
+    2.24,
+    1.67
+  ],
+  "vehicle.carlamotors.carlacola": [
+    5.2,
+    2.63,
+    2.47
+  ],
+  "vehicle.carlamotors.european_hgv": [
+    7.94,
+    2.89,
+    3.46
+  ],
+  "vehicle.carlamotors.firetruck": [
+    8.47,
+    2.89,
+    3.83
+  ],
+  "vehicle.chevrolet.impala": [
+    5.36,
+    2.03,
+    1.41
+  ],
+  "vehicle.citroen.c3": [
+    3.99,
+    1.85,
+    1.62
+  ],
+  "vehicle.diamondback.century": [
+    1.66,
+    0.58,
+    1.62
+  ],
+  "vehicle.dodge.charger_2020": [
+    5.01,
+    1.88,
+    1.53
+  ],
+  "vehicle.dodge.charger_police": [
+    4.97,
+    2.04,
+    1.54
+  ],
+  "vehicle.dodge.charger_police_2020": [
+    5.24,
+    1.93,
+    1.64
+  ],
+  "vehicle.ford.ambulance": [
+    6.37,
+    2.35,
+    2.43
+  ],
+  "vehicle.ford.crown": [
+    5.37,
+    1.8,
+    1.57
+  ],
+  "vehicle.ford.mustang": [
+    4.72,
+    1.89,
+    1.3
+  ],
+  "vehicle.gazelle.omafiets": [
+    1.84,
+    0.66,
+    1.78
+  ],
+  "vehicle.harley-davidson.low_rider": [
+    2.35,
+    0.77,
+    1.65
+  ],
+  "vehicle.jeep.wrangler_rubicon": [
+    3.87,
+    1.91,
+    1.88
+  ],
+  "vehicle.kawasaki.ninja": [
+    2.04,
+    0.8,
+    1.52
+  ],
+  "vehicle.lincoln.mkz_2017": [
+    4.9,
+    2.13,
+    1.51
+  ],
+  "vehicle.lincoln.mkz_2020": [
+    4.89,
+    1.84,
+    1.49
+  ],
+  "vehicle.mercedes.coupe": [
+    5.03,
+    2.15,
+    1.65
+  ],
+  "vehicle.mercedes.coupe_2020": [
+    4.67,
+    1.81,
+    1.44
+  ],
+  "vehicle.mercedes.sprinter": [
+    5.92,
+    1.99,
+    2.56
+  ],
+  "vehicle.micro.microlino": [
+    2.21,
+    1.48,
+    1.38
+  ],
+  "vehicle.mini.cooper_s": [
+    3.81,
+    1.97,
+    1.48
+  ],
+  "vehicle.mini.cooper_s_2021": [
+    4.55,
+    2.1,
+    1.77
+  ],
+  "vehicle.mitsubishi.fusorosa": [
+    10.27,
+    3.94,
+    4.25
+  ],
+  "vehicle.nissan.micra": [
+    3.63,
+    1.85,
+    1.5
+  ],
+  "vehicle.nissan.patrol": [
+    4.6,
+    1.93,
+    1.85
+  ],
+  "vehicle.nissan.patrol_2021": [
+    5.57,
+    2.15,
+    2.05
+  ],
+  "vehicle.seat.leon": [
+    4.19,
+    1.82,
+    1.47
+  ],
+  "vehicle.tesla.cybertruck": [
+    6.27,
+    2.39,
+    2.1
+  ],
+  "vehicle.tesla.model3": [
+    4.79,
+    2.16,
+    1.49
+  ],
+  "vehicle.toyota.prius": [
+    4.51,
+    2.01,
+    1.52
+  ],
+  "vehicle.vespa.zx125": [
+    1.82,
+    0.87,
+    1.59
+  ],
+  "vehicle.volkswagen.t2": [
+    4.48,
+    2.07,
+    2.04
+  ],
+  "vehicle.volkswagen.t2_2021": [
+    4.44,
+    1.77,
+    1.99
+  ],
+  "vehicle.yamaha.yzf": [
+    2.19,
+    0.87,
+    1.53
+  ],
+  "walker.pedestrian.0001": [
+    0.38,
+    0.38,
+    1.86
+  ],
+  "walker.pedestrian.0002": [
+    0.38,
+    0.38,
+    1.86
+  ],
+  "walker.pedestrian.0003": [
+    0.38,
+    0.38,
+    1.86
+  ],
+  "walker.pedestrian.0004": [
+    0.38,
+    0.38,
+    1.86
+  ],
+  "walker.pedestrian.0005": [
+    0.38,
+    0.38,
+    1.86
+  ],
+  "walker.pedestrian.0006": [
+    0.38,
+    0.38,
+    1.86
+  ],
+  "walker.pedestrian.0007": [
+    0.38,
+    0.38,
+    1.86
+  ],
+  "walker.pedestrian.0008": [
+    0.38,
+    0.38,
+    1.86
+  ],
+  "walker.pedestrian.0009": [
+    0.5,
+    0.5,
+    1.1
+  ],
+  "walker.pedestrian.0010": [
+    0.5,
+    0.5,
+    1.1
+  ],
+  "walker.pedestrian.0011": [
+    0.5,
+    0.5,
+    1.1
+  ],
+  "walker.pedestrian.0012": [
+    0.38,
+    0.38,
+    1.3
+  ],
+  "walker.pedestrian.0013": [
+    0.38,
+    0.38,
+    1.3
+  ],
+  "walker.pedestrian.0014": [
+    0.38,
+    0.38,
+    1.3
+  ],
+  "walker.pedestrian.0015": [
+    0.38,
+    0.38,
+    1.86
+  ],
+  "walker.pedestrian.0016": [
+    0.38,
+    0.38,
+    1.86
+  ],
+  "walker.pedestrian.0017": [
+    0.38,
+    0.38,
+    1.86
+  ],
+  "walker.pedestrian.0018": [
+    0.38,
+    0.38,
+    1.86
+  ],
+  "walker.pedestrian.0019": [
+    0.38,
+    0.38,
+    1.86
+  ],
+  "walker.pedestrian.0020": [
+    0.38,
+    0.38,
+    1.86
+  ],
+  "walker.pedestrian.0021": [
+    0.38,
+    0.38,
+    1.86
+  ],
+  "walker.pedestrian.0022": [
+    0.38,
+    0.38,
+    1.86
+  ],
+  "walker.pedestrian.0023": [
+    0.38,
+    0.38,
+    1.86
+  ],
+  "walker.pedestrian.0024": [
+    0.38,
+    0.38,
+    1.86
+  ],
+  "walker.pedestrian.0025": [
+    0.38,
+    0.38,
+    1.86
+  ],
+  "walker.pedestrian.0026": [
+    0.38,
+    0.38,
+    1.86
+  ],
+  "walker.pedestrian.0027": [
+    0.38,
+    0.38,
+    1.86
+  ],
+  "walker.pedestrian.0028": [
+    0.38,
+    0.38,
+    1.86
+  ],
+  "walker.pedestrian.0029": [
+    0.38,
+    0.38,
+    1.86
+  ],
+  "walker.pedestrian.0030": [
+    0.38,
+    0.38,
+    1.86
+  ],
+  "walker.pedestrian.0031": [
+    0.38,
+    0.38,
+    1.86
+  ],
+  "walker.pedestrian.0032": [
+    0.38,
+    0.38,
+    1.86
+  ],
+  "walker.pedestrian.0033": [
+    0.38,
+    0.38,
+    1.86
+  ],
+  "walker.pedestrian.0034": [
+    0.38,
+    0.38,
+    1.86
+  ],
+  "walker.pedestrian.0035": [
+    0.38,
+    0.38,
+    1.86
+  ],
+  "walker.pedestrian.0036": [
+    0.38,
+    0.38,
+    1.86
+  ],
+  "walker.pedestrian.0037": [
+    0.38,
+    0.38,
+    1.86
+  ],
+  "walker.pedestrian.0038": [
+    0.38,
+    0.38,
+    1.86
+  ],
+  "walker.pedestrian.0039": [
+    0.38,
+    0.38,
+    1.86
+  ],
+  "walker.pedestrian.0040": [
+    0.38,
+    0.38,
+    1.86
+  ],
+  "walker.pedestrian.0041": [
+    0.38,
+    0.38,
+    1.86
+  ],
+  "walker.pedestrian.0042": [
+    0.38,
+    0.38,
+    1.86
+  ],
+  "walker.pedestrian.0043": [
+    0.38,
+    0.38,
+    1.86
+  ],
+  "walker.pedestrian.0044": [
+    0.38,
+    0.38,
+    1.86
+  ],
+  "walker.pedestrian.0045": [
+    0.38,
+    0.38,
+    1.86
+  ],
+  "walker.pedestrian.0046": [
+    0.38,
+    0.38,
+    1.86
+  ],
+  "walker.pedestrian.0047": [
+    0.38,
+    0.38,
+    1.86
+  ],
+  "walker.pedestrian.0048": [
+    0.5,
+    0.5,
+    1.1
+  ],
+  "walker.pedestrian.0049": [
+    0.5,
+    0.5,
+    1.1
+  ],
+  "walker.pedestrian.0050": [
+    0.38,
+    0.38,
+    1.86
+  ],
+  "walker.pedestrian.0051": [
+    0.38,
+    0.38,
+    1.86
+  ],
+  "walker.pedestrian.0052": [
+    0.38,
+    0.38,
+    1.86
+  ]
+}

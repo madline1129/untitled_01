@@ -1,0 +1,28 @@
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments and local caches
+.venv/
+venv/
+env/
+.uv_cache/
+
+# Build outputs
+build/
+dist/
+*.egg-info/
+
+# Downloaded toolchains / binary caches
+gpudrive/external/madrona/external/madrona-toolchain/download/
+gpudrive/external/madrona/external/madrona-toolchain/bundled-toolchain/
+
+# Logs and local runtime files
+*.log
+wandb/
+runs/

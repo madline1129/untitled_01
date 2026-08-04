@@ -1,0 +1,346 @@
+{
+  "static.prop.bin": {
+    "type": "bottom"
+  },
+  "static.prop.dirtdebris01": {
+    "type": "center",
+    "half_height": 0.0744921863079071
+  },
+  "static.prop.streetbarrier": {
+    "type": "bottom"
+  },
+  "static.prop.trafficcone01": {
+    "type": "bottom"
+  },
+  "vehicle.audi.a2": {
+    "type": "bottom"
+  },
+  "vehicle.audi.etron": {
+    "type": "bottom"
+  },
+  "vehicle.audi.tt": {
+    "type": "bottom"
+  },
+  "vehicle.bh.crossbike": {
+    "type": "bottom"
+  },
+  "vehicle.bmw.grandtourer": {
+    "type": "bottom"
+  },
+  "vehicle.carlamotors.carlacola": {
+    "type": "bottom"
+  },
+  "vehicle.carlamotors.european_hgv": {
+    "type": "bottom"
+  },
+  "vehicle.carlamotors.firetruck": {
+    "type": "bottom"
+  },
+  "vehicle.chevrolet.impala": {
+    "type": "bottom"
+  },
+  "vehicle.citroen.c3": {
+    "type": "bottom"
+  },
+  "vehicle.diamondback.century": {
+    "type": "bottom"
+  },
+  "vehicle.dodge.charger_2020": {
+    "type": "bottom"
+  },
+  "vehicle.dodge.charger_police": {
+    "type": "bottom"
+  },
+  "vehicle.dodge.charger_police_2020": {
+    "type": "bottom"
+  },
+  "vehicle.ford.ambulance": {
+    "type": "bottom"
+  },
+  "vehicle.ford.crown": {
+    "type": "bottom"
+  },
+  "vehicle.ford.mustang": {
+    "type": "bottom"
+  },
+  "vehicle.gazelle.omafiets": {
+    "type": "bottom"
+  },
+  "vehicle.harley-davidson.low_rider": {
+    "type": "bottom"
+  },
+  "vehicle.jeep.wrangler_rubicon": {
+    "type": "bottom"
+  },
+  "vehicle.kawasaki.ninja": {
+    "type": "bottom"
+  },
+  "vehicle.lincoln.mkz_2017": {
+    "type": "bottom"
+  },
+  "vehicle.lincoln.mkz_2020": {
+    "type": "bottom"
+  },
+  "vehicle.mercedes.coupe": {
+    "type": "bottom"
+  },
+  "vehicle.mercedes.coupe_2020": {
+    "type": "bottom"
+  },
+  "vehicle.mercedes.sprinter": {
+    "type": "bottom"
+  },
+  "vehicle.micro.microlino": {
+    "type": "bottom"
+  },
+  "vehicle.mini.cooper_s": {
+    "type": "bottom"
+  },
+  "vehicle.mini.cooper_s_2021": {
+    "type": "bottom"
+  },
+  "vehicle.mitsubishi.fusorosa": {
+    "type": "bottom"
+  },
+  "vehicle.nissan.micra": {
+    "type": "bottom"
+  },
+  "vehicle.nissan.patrol": {
+    "type": "bottom"
+  },
+  "vehicle.nissan.patrol_2021": {
+    "type": "bottom"
+  },
+  "vehicle.seat.leon": {
+    "type": "bottom"
+  },
+  "vehicle.tesla.cybertruck": {
+    "type": "bottom"
+  },
+  "vehicle.tesla.model3": {
+    "type": "bottom"
+  },
+  "vehicle.toyota.prius": {
+    "type": "bottom"
+  },
+  "vehicle.vespa.zx125": {
+    "type": "bottom"
+  },
+  "vehicle.volkswagen.t2": {
+    "type": "bottom"
+  },
+  "vehicle.volkswagen.t2_2021": {
+    "type": "bottom"
+  },
+  "vehicle.yamaha.yzf": {
+    "type": "bottom"
+  },
+  "walker.pedestrian.0001": {
+    "type": "center",
+    "half_height": 0.9300000071525574
+  },
+  "walker.pedestrian.0002": {
+    "type": "center",
+    "half_height": 0.9300000071525574
+  },
+  "walker.pedestrian.0003": {
+    "type": "center",
+    "half_height": 0.9300000071525574
+  },
+  "walker.pedestrian.0004": {
+    "type": "center",
+    "half_height": 0.9300000071525574
+  },
+  "walker.pedestrian.0005": {
+    "type": "center",
+    "half_height": 0.9300000071525574
+  },
+  "walker.pedestrian.0006": {
+    "type": "center",
+    "half_height": 0.9300000071525574
+  },
+  "walker.pedestrian.0007": {
+    "type": "center",
+    "half_height": 0.9300000071525574
+  },
+  "walker.pedestrian.0008": {
+    "type": "center",
+    "half_height": 0.9300000071525574
+  },
+  "walker.pedestrian.0009": {
+    "type": "center",
+    "half_height": 0.550000011920929
+  },
+  "walker.pedestrian.0010": {
+    "type": "center",
+    "half_height": 0.550000011920929
+  },
+  "walker.pedestrian.0011": {
+    "type": "center",
+    "half_height": 0.550000011920929
+  },
+  "walker.pedestrian.0012": {
+    "type": "center",
+    "half_height": 0.6499999761581421
+  },
+  "walker.pedestrian.0013": {
+    "type": "center",
+    "half_height": 0.6499999761581421
+  },
+  "walker.pedestrian.0014": {
+    "type": "center",
+    "half_height": 0.6499999761581421
+  },
+  "walker.pedestrian.0015": {
+    "type": "center",
+    "half_height": 0.9300000071525574
+  },
+  "walker.pedestrian.0016": {
+    "type": "center",
+    "half_height": 0.9300000071525574
+  },
+  "walker.pedestrian.0017": {
+    "type": "center",
+    "half_height": 0.9300000071525574
+  },
+  "walker.pedestrian.0018": {
+    "type": "center",
+    "half_height": 0.9300000071525574
+  },
+  "walker.pedestrian.0019": {
+    "type": "center",
+    "half_height": 0.9300000071525574
+  },
+  "walker.pedestrian.0020": {
+    "type": "center",
+    "half_height": 0.9300000071525574
+  },
+  "walker.pedestrian.0021": {
+    "type": "center",
+    "half_height": 0.9300000071525574
+  },
+  "walker.pedestrian.0022": {
+    "type": "center",
+    "half_height": 0.9300000071525574
+  },
+  "walker.pedestrian.0023": {
+    "type": "center",
+    "half_height": 0.9300000071525574
+  },
+  "walker.pedestrian.0024": {
+    "type": "center",
+    "half_height": 0.9300000071525574
+  },
+  "walker.pedestrian.0025": {
+    "type": "center",
+    "half_height": 0.9300000071525574
+  },
+  "walker.pedestrian.0026": {
+    "type": "center",
+    "half_height": 0.9300000071525574
+  },
+  "walker.pedestrian.0027": {
+    "type": "center",
+    "half_height": 0.9300000071525574
+  },
+  "walker.pedestrian.0028": {
+    "type": "center",
+    "half_height": 0.9300000071525574
+  },
+  "walker.pedestrian.0029": {
+    "type": "center",
+    "half_height": 0.9300000071525574
+  },
+  "walker.pedestrian.0030": {
+    "type": "center",
+    "half_height": 0.9300000071525574
+  },
+  "walker.pedestrian.0031": {
+    "type": "center",
+    "half_height": 0.9300000071525574
+  },
+  "walker.pedestrian.0032": {
+    "type": "center",
+    "half_height": 0.9300000071525574
+  },
+  "walker.pedestrian.0033": {
+    "type": "center",
+    "half_height": 0.9300000071525574
+  },
+  "walker.pedestrian.0034": {
+    "type": "center",
+    "half_height": 0.9300000071525574
+  },
+  "walker.pedestrian.0035": {
+    "type": "center",
+    "half_height": 0.9300000071525574
+  },
+  "walker.pedestrian.0036": {
+    "type": "center",
+    "half_height": 0.9300000071525574
+  },
+  "walker.pedestrian.0037": {
+    "type": "center",
+    "half_height": 0.9300000071525574
+  },
+  "walker.pedestrian.0038": {
+    "type": "center",
+    "half_height": 0.9300000071525574
+  },
+  "walker.pedestrian.0039": {
+    "type": "center",
+    "half_height": 0.9300000071525574
+  },
+  "walker.pedestrian.0040": {
+    "type": "center",
+    "half_height": 0.9300000071525574
+  },
+  "walker.pedestrian.0041": {
+    "type": "center",
+    "half_height": 0.9300000071525574
+  },
+  "walker.pedestrian.0042": {
+    "type": "center",
+    "half_height": 0.9300000071525574
+  },
+  "walker.pedestrian.0043": {
+    "type": "center",
+    "half_height": 0.9300000071525574
+  },
+  "walker.pedestrian.0044": {
+    "type": "center",
+    "half_height": 0.9300000071525574
+  },
+  "walker.pedestrian.0045": {
+    "type": "center",
+    "half_height": 0.9300000071525574
+  },
+  "walker.pedestrian.0046": {
+    "type": "center",
+    "half_height": 0.9300000071525574
+  },
+  "walker.pedestrian.0047": {
+    "type": "center",
+    "half_height": 0.9300000071525574
+  },
+  "walker.pedestrian.0048": {
+    "type": "center",
+    "half_height": 0.550000011920929
+  },
+  "walker.pedestrian.0049": {
+    "type": "center",
+    "half_height": 0.550000011920929
+  },
+  "walker.pedestrian.0050": {
+    "type": "center",
+    "half_height": 0.9300000071525574
+  },
+  "walker.pedestrian.0051": {
+    "type": "center",
+    "half_height": 0.9300000071525574
+  },
+  "walker.pedestrian.0052": {
+    "type": "center",
+    "half_height": 0.9300000071525574
+  }
+}
