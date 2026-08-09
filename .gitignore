@@ -18,11 +18,39 @@ build/
 dist/
 *.egg-info/
 
+# Local datasets and generated training artifacts
+/dataset/
+/datasets/
+/data/
+/outputs/
+/checkpoints/
+/models/
+/wandb/
+/runs/
+
+# Large local data/model files
+*.db
+*.sqlite
+*.sqlite3
+*.parquet
+*.arrow
+*.h5
+*.hdf5
+*.npy
+*.npz
+*.pkl
+*.pickle
+*.pt
+*.pth
+*.ckpt
+*.onnx
+*.tfrecord
+*.tfrecords
+
 # Downloaded toolchains / binary caches
 gpudrive/external/madrona/external/madrona-toolchain/download/
 gpudrive/external/madrona/external/madrona-toolchain/bundled-toolchain/
 
 # Logs and local runtime files
 *.log
-wandb/
-runs/
+/dev_logs/
