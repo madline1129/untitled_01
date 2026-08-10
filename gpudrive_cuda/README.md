@@ -37,24 +37,34 @@ rollout.gif + final_frame.png
 
 ## 服务器环境
 
-需要：
+已有真实 nuPlan 数据的工作站可直接使用
+[真实 nuPlan 工作站复现指南](WORKSTATION_NUPLAN_REPRODUCTION.md)，让 Codex 自动定位数据库和地图并完成端到端验收。
+
+系统需要：
 
 ```text
 NVIDIA GPU + CUDA toolkit（需要 nvcc）
-CMake >= 3.24
 C++17 compiler
-Python >= 3.10
-matplotlib
-Pillow
 ```
 
-Python 渲染依赖可以安装为：
+Python 3.10、CMake、Ninja、Matplotlib 和 Pillow 由仓库根目录的 uv
+环境统一管理。新服务器先安装 uv：
 
 ```bash
-python3 -m pip install matplotlib Pillow
+curl -LsSf https://astral.sh/uv/install.sh | sh
+export PATH="$HOME/.local/bin:$PATH"
+
+cd /path/to/agent
+bash gpudrive_cuda/scripts/setup_uv_env.sh
 ```
 
+`uv sync --frozen` 会严格使用仓库提交的 `uv.lock` 创建 `.venv`。
 `nlohmann/json` 已在仓库 `gpudrive/external/json` 中，不需要额外下载。
+
+这个 uv 环境覆盖当前 `RuntimeScenario -> CUDA simulator -> GIF` 阶段。
+原始 nuPlan HD map 提取所需的 `nuplan-devkit`，以及 Waymo TFRecord 转换所需的
+TensorFlow/Waymo SDK 暂未放入该环境；当前 mock runtime 和 CUDA simulator
+运行不需要它们，后续处理真实原始数据时再建立独立数据转换环境。
 
 ## 一键运行 mock nuPlan
 
@@ -85,8 +95,8 @@ outputs/nuplan_cuda_demo/final_frame.png
 构建：
 
 ```bash
-cmake -S gpudrive_cuda -B gpudrive_cuda/build -DBUILD_TESTING=ON
-cmake --build gpudrive_cuda/build -j
+uv run --frozen cmake -S gpudrive_cuda -B gpudrive_cuda/build -G Ninja -DBUILD_TESTING=ON
+uv run --frozen cmake --build gpudrive_cuda/build -j
 ```
 
 运行全部自动控制 Agent：
@@ -113,7 +123,7 @@ gpudrive_cuda/build/drive_sim_cli \
 渲染：
 
 ```bash
-python3 gpudrive_cuda/tools/render_trace.py \
+uv run --frozen python gpudrive_cuda/tools/render_trace.py \
   --runtime dataset/nuplan/rl_runtime/mock_nuplan_00100000 \
   --trace outputs/nuplan_cuda_demo/trace.csv \
   --output outputs/nuplan_cuda_demo/rollout.gif
@@ -133,7 +143,7 @@ bash gpudrive_cuda/scripts/test_current.sh \
 ```bash
 gpudrive_cuda/build/runtime_loader_test \
   dataset/nuplan/rl_runtime/mock_nuplan_00100000
-python3 -m unittest gpudrive_cuda.tests.test_render_trace -v
+uv run --frozen python -m unittest gpudrive_cuda.tests.test_render_trace -v
 ```
 
 ## 后续接 ADRL

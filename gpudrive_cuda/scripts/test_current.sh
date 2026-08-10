@@ -10,8 +10,8 @@ TEST_OUTPUT_DIR="${TEST_OUTPUT_DIR:-${REPO_ROOT}/outputs/gpudrive_cuda_test}"
 BIN_PATH="${GPU_SIM_BUILD_DIR}/drive_sim_cli"
 LOG_PATH="${TEST_OUTPUT_DIR}/drive_sim_cli.out"
 
-command -v cmake >/dev/null 2>&1 || {
-    echo "[error] cmake not found" >&2
+command -v uv >/dev/null 2>&1 || {
+    echo "[error] uv not found; run gpudrive_cuda/scripts/setup_uv_env.sh first" >&2
     exit 1
 }
 command -v nvcc >/dev/null 2>&1 || {
@@ -19,8 +19,10 @@ command -v nvcc >/dev/null 2>&1 || {
     exit 1
 }
 mkdir -p "${GPU_SIM_BUILD_DIR}" "${TEST_OUTPUT_DIR}"
-cmake -S "${PROJECT_ROOT}" -B "${GPU_SIM_BUILD_DIR}" -DBUILD_TESTING=ON
-cmake --build "${GPU_SIM_BUILD_DIR}" -j
+cd "${REPO_ROOT}"
+uv sync --frozen
+uv run --frozen cmake -S "${PROJECT_ROOT}" -B "${GPU_SIM_BUILD_DIR}" -G Ninja -DBUILD_TESTING=ON
+uv run --frozen cmake --build "${GPU_SIM_BUILD_DIR}" -j
 "${GPU_SIM_BUILD_DIR}/runtime_loader_test" "${RUNTIME_PATH}"
 "${GPU_SIM_BUILD_DIR}/simulator_integration_test" "${RUNTIME_PATH}"
 "${BIN_PATH}" \
@@ -31,7 +33,7 @@ cmake --build "${GPU_SIM_BUILD_DIR}" -j
 
 grep -q "simulation complete" "${LOG_PATH}"
 grep -q "world,step,agent_slot" "${TEST_OUTPUT_DIR}/trace.csv"
-python3 - "${TEST_OUTPUT_DIR}/trace.csv" <<'PY'
+uv run --frozen python - "${TEST_OUTPUT_DIR}/trace.csv" <<'PY'
 import csv
 import math
 import sys
