@@ -162,6 +162,7 @@ private:
 
     Point3 *d_map_points_ = nullptr;
     std::int32_t *d_map_feature_type_ = nullptr;
+    std::int32_t *d_map_geometry_type_ = nullptr;
     std::int32_t *d_map_feature_point_start_ = nullptr;
     std::int32_t *d_map_feature_point_count_ = nullptr;
     std::uint8_t *d_map_feature_valid_ = nullptr;

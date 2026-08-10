@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import math
 import re
 import sqlite3
@@ -29,6 +30,38 @@ from ..validation import validate_scenario
 
 MAP_RADIUS_METERS = 150.0
 EGO_DIMENSIONS = (5.18, 2.30, 1.78)
+
+
+def _resolve_map_api_arguments(
+    maps_root: Path,
+    dataset_map_version: str,
+    dataset_location: str,
+) -> tuple[str, str]:
+    """Translate nuPlan log metadata into devkit map database arguments.
+
+    nuPlan log rows use ``map_version`` for the city map slug (for example
+    ``us-nv-las-vegas-strip``), while ``get_maps_api`` uses ``map_version``
+    for the metadata JSON stem (for example ``nuplan-maps-v1.0``).  Resolve
+    that naming mismatch from the maps already present on disk.
+    """
+
+    candidates = sorted(maps_root.glob("nuplan-maps-*.json"))
+    for metadata_path in candidates:
+        try:
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if dataset_map_version in metadata:
+            return metadata_path.stem, dataset_map_version
+
+    if (maps_root / dataset_map_version).is_dir() and len(candidates) == 1:
+        return candidates[0].stem, dataset_map_version
+
+    raise ValueError(
+        "cannot match nuPlan map metadata: "
+        f"log.location={dataset_location!r}, log.map_version={dataset_map_version!r}, "
+        f"maps_root={maps_root}"
+    )
 
 
 def _token_text(value: bytes) -> str:
@@ -126,8 +159,8 @@ def _map_subtype(map_object: object) -> Optional[str]:
 
 def _load_map_features(
     maps_root: Path,
-    map_version: str,
-    map_name: str,
+    dataset_map_version: str,
+    dataset_location: str,
     origin_x: float,
     origin_y: float,
     local_frame: LocalFrame,
@@ -141,6 +174,9 @@ def _load_map_features(
     except ImportError as error:
         raise RuntimeError("nuPlan devkit is required for map conversion") from error
 
+    map_version, map_name = _resolve_map_api_arguments(
+        maps_root, dataset_map_version, dataset_location
+    )
     map_api = get_maps_api(str(maps_root), map_version, map_name)
     layer_types = {
         SemanticMapLayer.LANE: "lane",
