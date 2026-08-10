@@ -15,6 +15,7 @@ env/
 
 # Build outputs
 build/
+/gpudrive_cuda/build*/
 dist/
 *.egg-info/
 
