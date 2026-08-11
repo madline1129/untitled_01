@@ -4,6 +4,9 @@
 simulator。它直接读取 `scenario_pipeline compile-rl` 生成的
 `RuntimeScenario v1`，不依赖 Madrona，也不读取原始 nuPlan SQLite。
 
+动态自行车模型的完整服务器复现步骤见
+[动态自行车模型复现指南](DYNAMIC_BICYCLE_REPRODUCTION.md)。
+
 ## 流水线
 
 ```text
@@ -29,7 +32,12 @@ rollout.gif + final_frame.png
 - 默认控制器优先跟踪 simulator-private `reference_future`，未来缺失时跟踪
   `agent_goal`；未来轨迹不会出现在 policy observation 中。
 - `external_control_mask` 可以让任意可控 Agent 改用外部动作。
-- 运动学自行车模型包含加速度、转角和速度限制。
+- 车辆使用带侧偏力、轮胎力饱和和横摆响应的动态自行车模型；低速区与
+  运动学模型平滑混合，行人和骑行者使用稳定的运动学回退。
+- 动作为目标加速度和目标前轮转角，执行器包含一阶响应、jerk 限制和转向
+  速率限制；实际加速度、实际转角、纵横向速度和横摆角速度写入 trace。
+- nuPlan 不提供质量和轮胎标定。simulator 根据 `agent_type` 选择模型，并根据
+  `length/width` 为车辆选择可配置的乘用车或大型车参数预设。
 - 车辆碰撞使用二维 OBB SAT；有地图时检测 road edge 和 drivable polygon
   越界；碰撞只记录，不改变车辆状态，也不结束 world。
 - 输出 self、最近 16 个 partner、最近 64 个 map segment 和当前交通灯观测。
@@ -85,6 +93,11 @@ outputs/nuplan_cuda_demo/summary.json
 outputs/nuplan_cuda_demo/rollout.gif
 outputs/nuplan_cuda_demo/final_frame.png
 ```
+
+`trace.csv` 中的 `acceleration/steering` 是限幅后的控制命令，
+`actual_acceleration/actual_steering` 是经过执行器响应后真正进入动力学模型的
+状态。`longitudinal_velocity/lateral_velocity/yaw_rate` 用于动力学验收；GIF
+保持简洁俯视样式并忽略这些附加列。
 
 当前 mock runtime 的 `map_features=0`，因此动画会显示车辆、目标和轨迹，
 但没有道路底图。用带 `--maps-root` 重新转换并编译的 runtime 会自动显示地图，

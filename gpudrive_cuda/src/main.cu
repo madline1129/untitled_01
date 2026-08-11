@@ -34,8 +34,8 @@ void print_usage(const char *program)
         << "  --worlds N                 Number of parallel worlds (default: 1)\n"
         << "  --steps N                  Rollout steps, 0 uses longest episode\n"
         << "  --external-agent SLOT      Externally control a slot; may be repeated\n"
-        << "  --acceleration VALUE       Constant external acceleration in m/s^2\n"
-        << "  --steering VALUE           Constant external steering in radians\n";
+        << "  --acceleration VALUE       Constant target acceleration in m/s^2\n"
+        << "  --steering VALUE           Constant target front-wheel angle in radians\n";
 }
 
 Arguments parse_arguments(int argc, char **argv)
@@ -104,6 +104,8 @@ void write_csv_header(std::ofstream &stream)
     stream
         << "world,step,agent_slot,agent_id,valid,control_mode,"
         << "x,y,yaw,vx,vy,acceleration,steering,"
+        << "actual_acceleration,actual_steering,"
+        << "longitudinal_velocity,lateral_velocity,yaw_rate,"
         << "collided_vehicle,collided_road,offroad,reached_goal,world_done\n";
 }
 
@@ -119,6 +121,8 @@ void write_snapshot(
             const int index = world * max_agents + agent;
             const AgentState &state = snapshot.states[static_cast<std::size_t>(index)];
             const AgentAction &action = snapshot.applied_actions[static_cast<std::size_t>(index)];
+            const VehicleDynamicsState &dynamics =
+                snapshot.dynamics_states[static_cast<std::size_t>(index)];
             const AgentEvent &event = snapshot.events[static_cast<std::size_t>(index)];
             stream
                 << world << ','
@@ -129,6 +133,9 @@ void write_snapshot(
                 << (snapshot.external_control[static_cast<std::size_t>(index)] != 0 ? "external" : "auto") << ','
                 << state.x << ',' << state.y << ',' << state.yaw << ',' << state.vx << ',' << state.vy << ','
                 << action.acceleration << ',' << action.steering << ','
+                << dynamics.longitudinal_acceleration << ',' << dynamics.steering_angle << ','
+                << dynamics.longitudinal_velocity << ',' << dynamics.lateral_velocity << ','
+                << dynamics.yaw_rate << ','
                 << event.collided_vehicle << ',' << event.collided_road << ','
                 << event.offroad << ',' << event.reached_goal << ','
                 << snapshot.world_done[static_cast<std::size_t>(world)] << '\n';
@@ -171,7 +178,8 @@ int main(int argc, char **argv)
         }
         write_csv_header(trace);
 
-        DriveSim simulator(SimConfig{}, scenes);
+        const SimConfig sim_config{};
+        DriveSim simulator(sim_config, scenes);
         std::vector<std::uint8_t> control_mask(
             static_cast<std::size_t>(arguments.worlds * max_agents), 0);
         std::vector<AgentAction> actions(
@@ -214,6 +222,10 @@ int main(int argc, char **argv)
         summary["max_agents"] = max_agents;
         summary["executed_steps"] = executed_steps;
         summary["trace"] = std::filesystem::absolute(trace_path).string();
+        summary["dynamics_model"] = "hybrid_dynamic_bicycle";
+        summary["dynamics_substeps"] = sim_config.dynamics_substeps;
+        summary["kinematic_speed_threshold"] = sim_config.kinematic_speed_threshold;
+        summary["dynamic_speed_threshold"] = sim_config.dynamic_speed_threshold;
         summary["vehicle_collision_agent_steps"] = vehicle_collision_rows;
         summary["road_collision_agent_steps"] = road_collision_rows;
         summary["offroad_agent_steps"] = offroad_rows;

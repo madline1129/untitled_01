@@ -21,36 +21,6 @@ struct AgentAction {
     float steering;
 };
 
-// 动态自行车模型的内部状态。速度分量使用车体坐标系。
-struct VehicleDynamicsState {
-    float longitudinal_velocity;
-    float lateral_velocity;
-    float yaw_rate;
-    float steering_angle;
-    float longitudinal_acceleration;
-};
-
-// 一组可配置的车辆动力学标定参数。
-struct VehicleDynamicsPreset {
-    float mass;
-    float yaw_inertia;
-    float front_cornering_stiffness;
-    float rear_cornering_stiffness;
-    float tire_friction;
-};
-
-// CPU 根据 Agent 类型和尺寸生成的逐车参数。
-struct VehicleParameters {
-    float mass;
-    float yaw_inertia;
-    float front_axle_distance;
-    float rear_axle_distance;
-    float front_cornering_stiffness;
-    float rear_cornering_stiffness;
-    float tire_friction;
-    int use_dynamic_model;
-};
-
 struct AgentDimensions {
     float length;
     float width;
@@ -79,14 +49,20 @@ struct SelfObservation {
     float x;
     float y;
     float yaw;
+
     float vx;
     float vy;
+
     float speed;
+
     float length;
     float width;
+
     float goal_dx;
     float goal_dy;
+
     float steps_remaining;
+
     int valid;
 };
 
@@ -96,124 +72,188 @@ struct PartnerObservation {
     float rel_vx;
     float rel_vy;
     float rel_yaw;
+
     float length;
     float width;
     float type;
+
     float distance;
+
     int valid;
 };
 
 struct MapObservation {
     float start_x;
     float start_y;
+
+    // 地图线段终点在当前 Agent 坐标系中的位置。
     float end_x;
     float end_y;
+
+    // 地图 feature 类型。
     float type;
+
+    // 当前地图 feature 的速度限制。
     float speed_limit;
+
+    // 当前 Agent 到该地图线段的距离。
     float distance;
+
+    // 当前 map observation 是否有效。
     int valid;
 };
 
+// 当前时间步的交通灯观测。
 struct SignalObservation {
+    // 交通灯关联的地图 feature 索引。
     int feature_index;
+
+    // 当前交通灯状态。
     int state;
+
+    // 当前交通灯状态是否有效。
     int valid;
 };
 
 struct SimConfig {
+    // 每个 Agent 保留最近的 partner 数量。
     int partner_observations = 16;
+
+    // 每个 Agent 保留最近的地图 segment 数量。
     int map_observations = 64;
+
+    // 自动控制器在参考未来轨迹中向前寻找多少步。
     int tracker_lookahead_steps = 3;
+
+    // 运动学约束。
     float min_acceleration = -6.0f;
     float max_acceleration = 4.0f;
     float max_abs_steering = 0.6f;
     float max_speed = 40.0f;
+
+    // Agent 与目标点距离小于该值时，记录 reached_goal。
     float goal_threshold = 2.0f;
+
+    // 自动控制器开始为红灯减速的距离。
     float red_light_stop_distance = 20.0f;
-
-    // 执行器响应和积分参数。
-    int dynamics_substeps = 5;
-    float acceleration_time_constant = 0.25f;
-    float steering_time_constant = 0.15f;
-    float max_jerk = 8.0f;
-    float max_steering_rate = 0.8f;
-
-    // 低速使用运动学模型，高速使用动态模型，中间平滑混合。
-    float kinematic_speed_threshold = 1.5f;
-    float dynamic_speed_threshold = 3.0f;
-    float max_abs_slip_angle = 0.5f;
-    float max_abs_yaw_rate = 2.5f;
-
-    // 车辆尺寸分类阈值。
-    float passenger_max_length = 6.5f;
-    float passenger_max_width = 2.5f;
-
-    VehicleDynamicsPreset passenger_vehicle{
-        1500.0f, 2500.0f, 80000.0f, 80000.0f, 0.9f};
-    VehicleDynamicsPreset large_vehicle{
-        8000.0f, 35000.0f, 160000.0f, 200000.0f, 0.8f};
 };
 
+// 从 GPU 拷贝到 CPU 的当前仿真结果。
 struct SimSnapshot {
+    // 形状：[num_worlds * max_agents]
     std::vector<AgentState> states;
     std::vector<AgentAction> applied_actions;
-    std::vector<VehicleDynamicsState> dynamics_states;
     std::vector<AgentEvent> events;
     std::vector<std::uint8_t> valid;
     std::vector<std::uint8_t> external_control;
+
+    // 形状：[num_worlds]
     std::vector<int> world_steps;
     std::vector<int> world_done;
 };
 
 class DriveSim {
 public:
-    DriveSim(SimConfig config, std::vector<RuntimeScene> scenes);
+    DriveSim(
+        SimConfig config,
+        std::vector<RuntimeScene> scenes
+    );
     ~DriveSim();
 
+    // DriveSim 内部持有原始的CUDA指针, 禁止复制, 防止两个指针都指向一个地方造成内存管理混乱
     DriveSim(const DriveSim &) = delete;
     DriveSim &operator=(const DriveSim &) = delete;
     DriveSim(DriveSim &&) = delete;
     DriveSim &operator=(DriveSim &&) = delete;
 
+    // 重置所有world
     void reset();
+
+    // 只重置指定的world, 其他world保持不变
     void reset_worlds(const std::vector<int> &world_ids);
-    void set_external_control_mask(const std::vector<std::uint8_t> &mask);
-    void set_actions(const std::vector<AgentAction> &actions);
+
+    // 设置哪些Agent由外部动作接管
+    // mask的形状[num_worlds * max_agents]
+    void set_external_control_mask(
+        const std::vector<std::uint8_t> &mask
+    );
+
+    // 设置所有Agent的外部动作
+    // 只有external_control mask 为 1 的 Agent 会真正使用这些动作
+    void set_actions(
+        const std::vector<AgentAction> &actions);
+
+    // 推进所有world一个时间步长
     void step();
 
+    //GPU->CPU
     SimSnapshot copy_snapshot() const;
-    std::vector<SelfObservation> copy_self_observations() const;
-    std::vector<PartnerObservation> copy_partner_observations() const;
-    std::vector<MapObservation> copy_map_observations() const;
-    std::vector<SignalObservation> copy_signal_observations() const;
+    std::vector<SelfObservation>
+    copy_self_observations() const;
+    std::vector<PartnerObservation>
+    copy_partner_observations() const;
+    // 从 GPU 拷贝 map observation。
+    std::vector<MapObservation>
+    copy_map_observations() const;
 
-    int num_worlds() const { return num_worlds_; }
-    int max_agents() const { return capacities_.max_agents; }
-    int partner_observation_count() const { return config_.partner_observations; }
-    int map_observation_count() const { return config_.map_observations; }
+    // 从 GPU 拷贝当前交通灯 observation。
+    std::vector<SignalObservation>
+    copy_signal_observations() const;
+
+    // 返回 simulator 中的 world 数量。
+    int num_worlds() const
+    {
+        return num_worlds_;
+    }
+
+    // 返回每个 world 的固定 Agent 容量。
+    int max_agents() const
+    {
+        return capacities_.max_agents;
+    }
+
+    // 返回每个 Agent 的 partner observation 数量。
+    int partner_observation_count() const
+    {
+        return config_.partner_observations;
+    }
+
+    // 返回每个 Agent 的 map observation 数量。
+    int map_observation_count() const
+    {
+        return config_.map_observations;
+    }
 
 private:
+    // 根据当前状态重新生成所有策略观测。
     void build_observations();
-    void allocate_and_upload(const std::vector<RuntimeScene> &scenes);
+
+    // 分配 GPU 内存，并上传所有 world 的只读场景数据。
+    void allocate_and_upload(
+        const std::vector<RuntimeScene> &scenes);
+
+    // 释放当前对象拥有的全部 CUDA 显存。
     void release() noexcept;
 
+    // simulator 配置和 batch 的固定容量。
     SimConfig config_;
     RuntimeCapacities capacities_;
     int num_worlds_ = 0;
     int total_agents_ = 0;
 
+    // 以下是从 RuntimeScene 上传的只读 Agent 数据。
     AgentState *d_initial_states_ = nullptr;
     std::uint8_t *d_initial_valid_ = nullptr;
     std::int32_t *d_agent_type_ = nullptr;
     std::uint8_t *d_agent_is_ego_ = nullptr;
     std::uint8_t *d_agent_controllable_ = nullptr;
     AgentDimensions *d_agent_dimensions_ = nullptr;
-    VehicleParameters *d_vehicle_parameters_ = nullptr;
     Point2 *d_agent_goals_ = nullptr;
     std::uint8_t *d_agent_goal_valid_ = nullptr;
     AgentState *d_reference_future_ = nullptr;
     std::uint8_t *d_reference_future_valid_ = nullptr;
 
+    // 以下是从 RuntimeScene 上传的只读地图数据。
     Point3 *d_map_points_ = nullptr;
     std::int32_t *d_map_feature_type_ = nullptr;
     std::int32_t *d_map_geometry_type_ = nullptr;
@@ -222,17 +262,20 @@ private:
     std::uint8_t *d_map_feature_valid_ = nullptr;
     float *d_map_speed_limit_ = nullptr;
     std::uint8_t *d_map_speed_limit_valid_ = nullptr;
+
+    // 以下是从 RuntimeScene 上传的交通灯时间表。
     std::int32_t *d_traffic_light_feature_index_ = nullptr;
     std::uint8_t *d_traffic_light_state_ = nullptr;
     std::uint8_t *d_traffic_light_valid_ = nullptr;
 
+    // 每个 world 独立使用的场景参数和有效数据数量。
     float *d_world_dt_ = nullptr;
     int *d_episode_steps_ = nullptr;
     int *d_map_feature_counts_ = nullptr;
     int *d_traffic_light_counts_ = nullptr;
 
+    // 以下数据会在 reset 或每次 step 时发生变化。
     AgentState *d_states_ = nullptr;
-    VehicleDynamicsState *d_dynamics_states_ = nullptr;
     AgentAction *d_external_actions_ = nullptr;
     AgentAction *d_applied_actions_ = nullptr;
     std::uint8_t *d_external_control_ = nullptr;
@@ -246,11 +289,19 @@ private:
     int *d_world_reset_mask_ = nullptr;
 };
 
-static_assert(sizeof(AgentState) == sizeof(float) * 5, "AgentState must match runtime state layout");
-static_assert(sizeof(AgentAction) == sizeof(float) * 2, "AgentAction must be tightly packed");
+// 这些结构会由 float 张量直接转换并上传，禁止出现额外内存 padding。
 static_assert(
-    sizeof(VehicleDynamicsState) == sizeof(float) * 5,
-    "VehicleDynamicsState must be tightly packed");
-static_assert(sizeof(AgentDimensions) == sizeof(float) * 3, "AgentDimensions must be tightly packed");
-static_assert(sizeof(Point2) == sizeof(float) * 2, "Point2 must be tightly packed");
-static_assert(sizeof(Point3) == sizeof(float) * 3, "Point3 must be tightly packed");
+    sizeof(AgentState) == sizeof(float) * 5,
+    "AgentState must match runtime state layout");
+static_assert(
+    sizeof(AgentAction) == sizeof(float) * 2,
+    "AgentAction must be tightly packed");
+static_assert(
+    sizeof(AgentDimensions) == sizeof(float) * 3,
+    "AgentDimensions must be tightly packed");
+static_assert(
+    sizeof(Point2) == sizeof(float) * 2,
+    "Point2 must be tightly packed");
+static_assert(
+    sizeof(Point3) == sizeof(float) * 3,
+    "Point3 must be tightly packed");

@@ -12,6 +12,8 @@
 namespace {
 
 constexpr float kPi = 3.14159265358979323846f;
+constexpr float kGravity = 9.81f;
+constexpr int kAgentTypeVehicle = 1;
 constexpr int kMapTypeRoadEdge = 4;
 constexpr int kMapTypeRoadblock = 8;
 constexpr int kMapTypeRoadblockConnector = 9;
@@ -84,9 +86,66 @@ std::vector<T> packed_structs(const std::vector<float> &values, int width)
     return result;
 }
 
+bool valid_dynamics_preset(const VehicleDynamicsPreset &preset)
+{
+    return preset.mass > 0.0f && preset.yaw_inertia > 0.0f &&
+           preset.front_cornering_stiffness > 0.0f &&
+           preset.rear_cornering_stiffness > 0.0f &&
+           preset.tire_friction > 0.0f;
+}
+
+VehicleParameters make_vehicle_parameters(
+    std::int32_t agent_type,
+    const AgentDimensions &dimensions,
+    const SimConfig &config)
+{
+    const bool passenger = dimensions.length < config.passenger_max_length &&
+                           dimensions.width < config.passenger_max_width;
+    const VehicleDynamicsPreset &preset =
+        passenger ? config.passenger_vehicle : config.large_vehicle;
+    const float length = std::max(0.1f, dimensions.length);
+    const float wheelbase = std::clamp(
+        0.6f * length,
+        1.0f,
+        std::max(1.0f, 0.9f * length));
+    return VehicleParameters{
+        preset.mass,
+        preset.yaw_inertia,
+        0.45f * wheelbase,
+        0.55f * wheelbase,
+        preset.front_cornering_stiffness,
+        preset.rear_cornering_stiffness,
+        preset.tire_friction,
+        agent_type == kAgentTypeVehicle ? 1 : 0,
+    };
+}
+
 __device__ float clamp_value(float value, float lower, float upper)
 {
     return fminf(upper, fmaxf(lower, value));
+}
+
+__device__ float smoothstep_value(float lower, float upper, float value)
+{
+    const float normalized = clamp_value((value - lower) / (upper - lower), 0.0f, 1.0f);
+    return normalized * normalized * (3.0f - 2.0f * normalized);
+}
+
+__device__ float update_actuator(
+    float current,
+    float target,
+    float time_constant,
+    float max_rate,
+    float dt)
+{
+    const float remaining = target - current;
+    const float desired_change = remaining * dt / time_constant;
+    const float maximum_change = max_rate * dt;
+    const float rate_limited = clamp_value(desired_change, -maximum_change, maximum_change);
+    const float change = remaining >= 0.0f
+        ? clamp_value(rate_limited, 0.0f, remaining)
+        : clamp_value(rate_limited, remaining, 0.0f);
+    return current + change;
 }
 
 __device__ int min_int(int left, int right)
@@ -269,6 +328,7 @@ __global__ void reset_agent_kernel(
     const AgentState *initial_states,
     const std::uint8_t *initial_valid,
     AgentState *states,
+    VehicleDynamicsState *dynamics_states,
     AgentAction *external_actions,
     AgentAction *applied_actions,
     std::uint8_t *external_control,
@@ -282,12 +342,23 @@ __global__ void reset_agent_kernel(
         return;
     }
     states[index] = initial_states[index];
+    const AgentState initial = initial_states[index];
+    const float cosine = cosf(initial.yaw);
+    const float sine = sinf(initial.yaw);
+    dynamics_states[index] = VehicleDynamicsState{
+        fmaxf(0.0f, cosine * initial.vx + sine * initial.vy),
+        -sine * initial.vx + cosine * initial.vy,
+        0.0f,
+        0.0f,
+        0.0f,
+    };
     external_actions[index] = AgentAction{0.0f, 0.0f};
     applied_actions[index] = AgentAction{0.0f, 0.0f};
     external_control[index] = 0;
     events[index] = AgentEvent{0, 0, 0, 0};
     if (initial_valid[index] == 0) {
         states[index] = AgentState{0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+        dynamics_states[index] = VehicleDynamicsState{0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
     }
 }
 
@@ -432,8 +503,9 @@ __global__ void controller_kernel(
 
 __global__ void dynamics_kernel(
     AgentState *states,
+    VehicleDynamicsState *dynamics_states,
     const AgentAction *actions,
-    const AgentDimensions *dimensions,
+    const VehicleParameters *vehicle_parameters,
     const std::uint8_t *valid,
     const float *world_dt,
     const int *world_done,
@@ -442,7 +514,16 @@ __global__ void dynamics_kernel(
     float min_acceleration,
     float max_acceleration,
     float max_steering,
-    float max_speed)
+    float max_speed,
+    int substeps,
+    float acceleration_time_constant,
+    float steering_time_constant,
+    float max_jerk,
+    float max_steering_rate,
+    float kinematic_speed_threshold,
+    float dynamic_speed_threshold,
+    float max_slip_angle,
+    float max_yaw_rate)
 {
     const int index = blockIdx.x * blockDim.x + threadIdx.x;
     if (index >= total_agents || valid[index] == 0) {
@@ -454,22 +535,162 @@ __global__ void dynamics_kernel(
     }
 
     AgentState state = states[index];
+    VehicleDynamicsState dynamics = dynamics_states[index];
+    const VehicleParameters parameters = vehicle_parameters[index];
     AgentAction action = actions[index];
     action.acceleration = clamp_value(action.acceleration, min_acceleration, max_acceleration);
     action.steering = clamp_value(action.steering, -max_steering, max_steering);
-    const float dt = world_dt[world];
-    const float speed = sqrtf(state.vx * state.vx + state.vy * state.vy);
-    const float next_speed = clamp_value(speed + action.acceleration * dt, 0.0f, max_speed);
-    const float average_speed = 0.5f * (speed + next_speed);
-    const float wheelbase = fmaxf(1.0f, 0.6f * dimensions[index].length);
-    const float beta = atanf(0.5f * tanf(action.steering));
-    state.x += average_speed * cosf(state.yaw + beta) * dt;
-    state.y += average_speed * sinf(state.yaw + beta) * dt;
-    state.yaw = wrap_angle(
-        state.yaw + average_speed * cosf(beta) * tanf(action.steering) / wheelbase * dt);
-    state.vx = next_speed * cosf(state.yaw);
-    state.vy = next_speed * sinf(state.yaw);
+    const float dt = world_dt[world] / static_cast<float>(substeps);
+    const float wheelbase = parameters.front_axle_distance + parameters.rear_axle_distance;
+
+    for (int substep = 0; substep < substeps; ++substep) {
+        const AgentState previous_state = state;
+        const VehicleDynamicsState previous_dynamics = dynamics;
+
+        dynamics.longitudinal_acceleration = clamp_value(
+            update_actuator(
+                dynamics.longitudinal_acceleration,
+                action.acceleration,
+                acceleration_time_constant,
+                max_jerk,
+                dt),
+            min_acceleration,
+            max_acceleration);
+        dynamics.steering_angle = clamp_value(
+            update_actuator(
+                dynamics.steering_angle,
+                action.steering,
+                steering_time_constant,
+                max_steering_rate,
+                dt),
+            -max_steering,
+            max_steering);
+
+        const float body_speed = hypotf(
+            dynamics.longitudinal_velocity,
+            dynamics.lateral_velocity);
+        const float next_kinematic_speed = clamp_value(
+            body_speed + dynamics.longitudinal_acceleration * dt,
+            0.0f,
+            max_speed);
+        const float average_kinematic_speed =
+            0.5f * (body_speed + next_kinematic_speed);
+        const float beta = atanf(
+            parameters.rear_axle_distance / wheelbase *
+            tanf(dynamics.steering_angle));
+        const float kinematic_u = next_kinematic_speed * cosf(beta);
+        const float kinematic_v = next_kinematic_speed * sinf(beta);
+        const float kinematic_yaw_rate = clamp_value(
+            average_kinematic_speed * cosf(beta) *
+                tanf(dynamics.steering_angle) / wheelbase,
+            -max_yaw_rate,
+            max_yaw_rate);
+        const float kinematic_yaw = wrap_angle(
+            state.yaw + kinematic_yaw_rate * dt);
+        const float kinematic_x = state.x +
+            average_kinematic_speed * cosf(state.yaw + beta) * dt;
+        const float kinematic_y = state.y +
+            average_kinematic_speed * sinf(state.yaw + beta) * dt;
+
+        const float u = fmaxf(0.0f, dynamics.longitudinal_velocity);
+        const float v = dynamics.lateral_velocity;
+        const float yaw_rate = dynamics.yaw_rate;
+        const float safe_u = fmaxf(0.5f, u);
+        const float front_slip = clamp_value(
+            dynamics.steering_angle -
+                atan2f(v + parameters.front_axle_distance * yaw_rate, safe_u),
+            -max_slip_angle,
+            max_slip_angle);
+        const float rear_slip = clamp_value(
+            -atan2f(v - parameters.rear_axle_distance * yaw_rate, safe_u),
+            -max_slip_angle,
+            max_slip_angle);
+
+        const float front_normal_force =
+            parameters.mass * kGravity * parameters.rear_axle_distance / wheelbase;
+        const float rear_normal_force =
+            parameters.mass * kGravity * parameters.front_axle_distance / wheelbase;
+        const float front_lateral_force = clamp_value(
+            parameters.front_cornering_stiffness * front_slip,
+            -parameters.tire_friction * front_normal_force,
+            parameters.tire_friction * front_normal_force);
+        const float rear_lateral_force = clamp_value(
+            parameters.rear_cornering_stiffness * rear_slip,
+            -parameters.tire_friction * rear_normal_force,
+            parameters.tire_friction * rear_normal_force);
+
+        const float steering_cosine = cosf(dynamics.steering_angle);
+        const float steering_sine = sinf(dynamics.steering_angle);
+        const float longitudinal_derivative =
+            dynamics.longitudinal_acceleration + v * yaw_rate -
+            front_lateral_force * steering_sine / parameters.mass;
+        const float lateral_derivative =
+            (front_lateral_force * steering_cosine + rear_lateral_force) /
+                parameters.mass -
+            u * yaw_rate;
+        const float yaw_rate_derivative =
+            (parameters.front_axle_distance * front_lateral_force * steering_cosine -
+             parameters.rear_axle_distance * rear_lateral_force) /
+            parameters.yaw_inertia;
+
+        float dynamic_u = clamp_value(
+            u + longitudinal_derivative * dt,
+            0.0f,
+            max_speed);
+        float dynamic_v = clamp_value(
+            v + lateral_derivative * dt,
+            -max_speed,
+            max_speed);
+        const float dynamic_speed = hypotf(dynamic_u, dynamic_v);
+        if (dynamic_speed > max_speed) {
+            const float scale = max_speed / dynamic_speed;
+            dynamic_u *= scale;
+            dynamic_v *= scale;
+        }
+        const float dynamic_yaw_rate = clamp_value(
+            yaw_rate + yaw_rate_derivative * dt,
+            -max_yaw_rate,
+            max_yaw_rate);
+        const float dynamic_yaw = wrap_angle(
+            state.yaw + dynamic_yaw_rate * dt);
+        const float dynamic_x = state.x +
+            (dynamic_u * cosf(dynamic_yaw) - dynamic_v * sinf(dynamic_yaw)) * dt;
+        const float dynamic_y = state.y +
+            (dynamic_u * sinf(dynamic_yaw) + dynamic_v * cosf(dynamic_yaw)) * dt;
+
+        const float blend = parameters.use_dynamic_model != 0
+            ? smoothstep_value(
+                  kinematic_speed_threshold,
+                  dynamic_speed_threshold,
+                  body_speed)
+            : 0.0f;
+        state.x = kinematic_x + blend * (dynamic_x - kinematic_x);
+        state.y = kinematic_y + blend * (dynamic_y - kinematic_y);
+        state.yaw = wrap_angle(
+            kinematic_yaw + blend * wrap_angle(dynamic_yaw - kinematic_yaw));
+        dynamics.longitudinal_velocity =
+            kinematic_u + blend * (dynamic_u - kinematic_u);
+        dynamics.lateral_velocity =
+            kinematic_v + blend * (dynamic_v - kinematic_v);
+        dynamics.yaw_rate =
+            kinematic_yaw_rate + blend * (dynamic_yaw_rate - kinematic_yaw_rate);
+        state.vx = dynamics.longitudinal_velocity * cosf(state.yaw) -
+                   dynamics.lateral_velocity * sinf(state.yaw);
+        state.vy = dynamics.longitudinal_velocity * sinf(state.yaw) +
+                   dynamics.lateral_velocity * cosf(state.yaw);
+
+        if (!isfinite(state.x) || !isfinite(state.y) || !isfinite(state.yaw) ||
+            !isfinite(state.vx) || !isfinite(state.vy) ||
+            !isfinite(dynamics.longitudinal_velocity) ||
+            !isfinite(dynamics.lateral_velocity) || !isfinite(dynamics.yaw_rate)) {
+            state = previous_state;
+            dynamics = previous_dynamics;
+            break;
+        }
+    }
+
     states[index] = state;
+    dynamics_states[index] = dynamics;
 }
 
 __global__ void collision_kernel(
@@ -833,9 +1054,23 @@ DriveSim::DriveSim(SimConfig config, std::vector<RuntimeScene> scenes)
     if (config_.map_observations <= 0 || config_.map_observations > kMaximumMapObservations) {
         throw std::runtime_error("map_observations must be in [1, 64]");
     }
-    if (config_.tracker_lookahead_steps <= 0 || config_.max_speed <= 0.0f ||
-        config_.goal_threshold <= 0.0f) {
+    if (config_.tracker_lookahead_steps <= 0 ||
+        config_.min_acceleration >= config_.max_acceleration ||
+        config_.max_abs_steering <= 0.0f || config_.max_speed <= 0.0f ||
+        config_.goal_threshold <= 0.0f || config_.red_light_stop_distance <= 0.0f) {
         throw std::runtime_error("invalid simulator configuration");
+    }
+    if (config_.dynamics_substeps <= 0 || config_.dynamics_substeps > 64 ||
+        config_.acceleration_time_constant <= 0.0f ||
+        config_.steering_time_constant <= 0.0f || config_.max_jerk <= 0.0f ||
+        config_.max_steering_rate <= 0.0f ||
+        config_.kinematic_speed_threshold < 0.0f ||
+        config_.dynamic_speed_threshold <= config_.kinematic_speed_threshold ||
+        config_.max_abs_slip_angle <= 0.0f || config_.max_abs_yaw_rate <= 0.0f ||
+        config_.passenger_max_length <= 0.0f || config_.passenger_max_width <= 0.0f ||
+        !valid_dynamics_preset(config_.passenger_vehicle) ||
+        !valid_dynamics_preset(config_.large_vehicle)) {
+        throw std::runtime_error("invalid vehicle dynamics configuration");
     }
     for (const RuntimeScene &scene : scenes) {
         if (!(scene.capacities == capacities_)) {
@@ -864,6 +1099,7 @@ void DriveSim::allocate_and_upload(const std::vector<RuntimeScene> &scenes)
     std::vector<std::uint8_t> agent_is_ego;
     std::vector<std::uint8_t> agent_controllable;
     std::vector<AgentDimensions> dimensions;
+    std::vector<VehicleParameters> vehicle_parameters;
     std::vector<Point2> goals;
     std::vector<std::uint8_t> goal_valid;
     std::vector<AgentState> future;
@@ -885,12 +1121,20 @@ void DriveSim::allocate_and_upload(const std::vector<RuntimeScene> &scenes)
     std::vector<int> traffic_counts;
 
     for (const RuntimeScene &scene : scenes) {
+        const std::vector<AgentDimensions> scene_dimensions =
+            packed_structs<AgentDimensions>(scene.agent_dimensions, 3);
         append_values(initial_states, packed_structs<AgentState>(scene.agent_initial_state, 5));
         append_values(initial_valid, scene.agent_initial_valid);
         append_values(agent_type, scene.agent_type);
         append_values(agent_is_ego, scene.agent_is_ego);
         append_values(agent_controllable, scene.agent_controllable);
-        append_values(dimensions, packed_structs<AgentDimensions>(scene.agent_dimensions, 3));
+        append_values(dimensions, scene_dimensions);
+        for (int agent = 0; agent < scene.capacities.max_agents; ++agent) {
+            vehicle_parameters.push_back(make_vehicle_parameters(
+                scene.agent_type[static_cast<std::size_t>(agent)],
+                scene_dimensions[static_cast<std::size_t>(agent)],
+                config_));
+        }
         append_values(goals, packed_structs<Point2>(scene.agent_goal, 2));
         append_values(goal_valid, scene.agent_goal_valid);
         append_values(future, packed_structs<AgentState>(scene.reference_future, 5));
@@ -918,6 +1162,7 @@ void DriveSim::allocate_and_upload(const std::vector<RuntimeScene> &scenes)
     upload_device(&d_agent_is_ego_, agent_is_ego);
     upload_device(&d_agent_controllable_, agent_controllable);
     upload_device(&d_agent_dimensions_, dimensions);
+    upload_device(&d_vehicle_parameters_, vehicle_parameters);
     upload_device(&d_agent_goals_, goals);
     upload_device(&d_agent_goal_valid_, goal_valid);
     upload_device(&d_reference_future_, future);
@@ -939,6 +1184,7 @@ void DriveSim::allocate_and_upload(const std::vector<RuntimeScene> &scenes)
     upload_device(&d_traffic_light_counts_, traffic_counts);
 
     allocate_device(&d_states_, static_cast<std::size_t>(total_agents_));
+    allocate_device(&d_dynamics_states_, static_cast<std::size_t>(total_agents_));
     allocate_device(&d_external_actions_, static_cast<std::size_t>(total_agents_));
     allocate_device(&d_applied_actions_, static_cast<std::size_t>(total_agents_));
     allocate_device(&d_external_control_, static_cast<std::size_t>(total_agents_));
@@ -967,6 +1213,7 @@ void DriveSim::release() noexcept
     CUDA_FREE(d_agent_is_ego_);
     CUDA_FREE(d_agent_controllable_);
     CUDA_FREE(d_agent_dimensions_);
+    CUDA_FREE(d_vehicle_parameters_);
     CUDA_FREE(d_agent_goals_);
     CUDA_FREE(d_agent_goal_valid_);
     CUDA_FREE(d_reference_future_);
@@ -987,6 +1234,7 @@ void DriveSim::release() noexcept
     CUDA_FREE(d_map_feature_counts_);
     CUDA_FREE(d_traffic_light_counts_);
     CUDA_FREE(d_states_);
+    CUDA_FREE(d_dynamics_states_);
     CUDA_FREE(d_external_actions_);
     CUDA_FREE(d_applied_actions_);
     CUDA_FREE(d_external_control_);
@@ -1032,6 +1280,7 @@ void DriveSim::reset_worlds(const std::vector<int> &world_ids)
         d_initial_states_,
         d_initial_valid_,
         d_states_,
+        d_dynamics_states_,
         d_external_actions_,
         d_applied_actions_,
         d_external_control_,
@@ -1110,8 +1359,9 @@ void DriveSim::step()
     check_kernel_launch();
     dynamics_kernel<<<(total_agents_ + threads - 1) / threads, threads>>>(
         d_states_,
+        d_dynamics_states_,
         d_applied_actions_,
-        d_agent_dimensions_,
+        d_vehicle_parameters_,
         d_initial_valid_,
         d_world_dt_,
         d_world_done_,
@@ -1120,7 +1370,16 @@ void DriveSim::step()
         config_.min_acceleration,
         config_.max_acceleration,
         config_.max_abs_steering,
-        config_.max_speed);
+        config_.max_speed,
+        config_.dynamics_substeps,
+        config_.acceleration_time_constant,
+        config_.steering_time_constant,
+        config_.max_jerk,
+        config_.max_steering_rate,
+        config_.kinematic_speed_threshold,
+        config_.dynamic_speed_threshold,
+        config_.max_abs_slip_angle,
+        config_.max_abs_yaw_rate);
     check_kernel_launch();
 
     const int total_pairs = num_worlds_ * capacities_.max_agents * capacities_.max_agents;
@@ -1222,6 +1481,8 @@ SimSnapshot DriveSim::copy_snapshot() const
     snapshot.states = download_device(d_states_, static_cast<std::size_t>(total_agents_));
     snapshot.applied_actions = download_device(
         d_applied_actions_, static_cast<std::size_t>(total_agents_));
+    snapshot.dynamics_states = download_device(
+        d_dynamics_states_, static_cast<std::size_t>(total_agents_));
     snapshot.events = download_device(d_events_, static_cast<std::size_t>(total_agents_));
     snapshot.valid = download_device(d_initial_valid_, static_cast<std::size_t>(total_agents_));
     snapshot.external_control = download_device(

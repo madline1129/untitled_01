@@ -33,6 +33,7 @@ uv run --frozen cmake --build "${GPU_SIM_BUILD_DIR}" -j
 
 grep -q "simulation complete" "${LOG_PATH}"
 grep -q "world,step,agent_slot" "${TEST_OUTPUT_DIR}/trace.csv"
+grep -q "actual_acceleration,actual_steering" "${TEST_OUTPUT_DIR}/trace.csv"
 uv run --frozen python - "${TEST_OUTPUT_DIR}/trace.csv" <<'PY'
 import csv
 import math
@@ -46,6 +47,32 @@ distance = math.hypot(float(rows[-1]["x"]) - float(rows[0]["x"]), float(rows[-1]
 if not math.isfinite(distance) or distance <= 0.01:
     raise SystemExit(f"ego did not move: displacement={distance}")
 print(f"[test] ego displacement: {distance:.3f} m")
+PY
+
+uv run --frozen python "${PROJECT_ROOT}/tools/render_trace.py" \
+    --runtime "${RUNTIME_PATH}" \
+    --trace "${TEST_OUTPUT_DIR}/trace.csv" \
+    --output "${TEST_OUTPUT_DIR}/rollout.gif" \
+    --final-png "${TEST_OUTPUT_DIR}/final_frame.png"
+test -s "${TEST_OUTPUT_DIR}/rollout.gif"
+test -s "${TEST_OUTPUT_DIR}/final_frame.png"
+uv run --frozen python - "${TEST_OUTPUT_DIR}/trace.csv" "${TEST_OUTPUT_DIR}/rollout.gif" <<'PY'
+import csv
+import sys
+
+from PIL import Image
+
+with open(sys.argv[1], newline="", encoding="utf-8") as stream:
+    steps = {
+        int(row["step"])
+        for row in csv.DictReader(stream)
+        if row["world"] == "0"
+    }
+with Image.open(sys.argv[2]) as animation:
+    frames = animation.n_frames
+if frames != len(steps):
+    raise SystemExit(f"GIF frame count mismatch: frames={frames}, steps={len(steps)}")
+print(f"[test] GIF frames: {frames}")
 PY
 
 echo "[test] CUDA simulator integration ok"
