@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import math
 import shutil
 import sqlite3
@@ -7,7 +8,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from scenario_pipeline.adapters.nuplan import convert_nuplan_database
+from scenario_pipeline.adapters.nuplan import _resolve_map_api_arguments, convert_nuplan_database
 from scenario_pipeline.io import read_scenario, write_scenario
 from scenario_pipeline.validation import validate_scenario
 
@@ -17,6 +18,40 @@ MOCK_DB = ROOT / "dataset/nuplan/nuplan-v1.1/splits/mock/mock_nuplan.db"
 
 
 class NuPlanAdapterTest(unittest.TestCase):
+    def test_map_arguments_support_metadata_version_in_map_version(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            maps_root = Path(directory)
+            metadata_path = maps_root / "nuplan-maps-v1.0.json"
+            metadata_path.write_text(
+                json.dumps({"us-nv-las-vegas-strip": {}}),
+                encoding="utf-8",
+            )
+
+            arguments = _resolve_map_api_arguments(
+                maps_root,
+                "nuplan-maps-v1.0",
+                "us-nv-las-vegas-strip",
+            )
+
+        self.assertEqual(arguments, ("nuplan-maps-v1.0", "us-nv-las-vegas-strip"))
+
+    def test_map_arguments_support_city_slug_in_map_version(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            maps_root = Path(directory)
+            metadata_path = maps_root / "nuplan-maps-v1.0.json"
+            metadata_path.write_text(
+                json.dumps({"us-nv-las-vegas-strip": {}}),
+                encoding="utf-8",
+            )
+
+            arguments = _resolve_map_api_arguments(
+                maps_root,
+                "us-nv-las-vegas-strip",
+                "las_vegas",
+            )
+
+        self.assertEqual(arguments, ("nuplan-maps-v1.0", "us-nv-las-vegas-strip"))
+
     def test_mock_database_conversion(self) -> None:
         scenario = convert_nuplan_database(MOCK_DB)[0]
         self.assertEqual(scenario.timing.num_steps, 96)

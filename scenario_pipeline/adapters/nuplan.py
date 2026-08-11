@@ -39,23 +39,39 @@ def _resolve_map_api_arguments(
 ) -> tuple[str, str]:
     """Translate nuPlan log metadata into devkit map database arguments.
 
-    nuPlan log rows use ``map_version`` for the city map slug (for example
-    ``us-nv-las-vegas-strip``), while ``get_maps_api`` uses ``map_version``
-    for the metadata JSON stem (for example ``nuplan-maps-v1.0``).  Resolve
-    that naming mismatch from the maps already present on disk.
+    nuPlan databases in use encode these fields in two layouts: ``map_version``
+    can be either the metadata JSON stem or the city map slug. Resolve both
+    layouts against the maps already present on disk.
     """
 
     candidates = sorted(maps_root.glob("nuplan-maps-*.json"))
+    metadata_candidates: list[tuple[Path, dict[str, Any]]] = []
     for metadata_path in candidates:
         try:
             metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             continue
+        if not isinstance(metadata, dict):
+            continue
+        metadata_candidates.append((metadata_path, metadata))
+
+    # Standard devkit layout: map_version names the metadata file and
+    # location names the city map inside that file.
+    for metadata_path, metadata in metadata_candidates:
+        if metadata_path.stem == dataset_map_version and dataset_location in metadata:
+            return metadata_path.stem, dataset_location
+
+    # Some cached databases put the city map slug in map_version and keep a
+    # short location alias (for example "las_vegas") in location.
+    for metadata_path, metadata in metadata_candidates:
         if dataset_map_version in metadata:
             return metadata_path.stem, dataset_map_version
 
-    if (maps_root / dataset_map_version).is_dir() and len(candidates) == 1:
-        return candidates[0].stem, dataset_map_version
+    if len(metadata_candidates) == 1:
+        metadata_path, _ = metadata_candidates[0]
+        for map_name in (dataset_map_version, dataset_location):
+            if (maps_root / map_name).is_dir():
+                return metadata_path.stem, map_name
 
     raise ValueError(
         "cannot match nuPlan map metadata: "
