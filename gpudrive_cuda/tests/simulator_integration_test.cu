@@ -115,6 +115,30 @@ void test_rollout_and_reset(const RuntimeScene &source)
                   stepped.states[static_cast<std::size_t>(world_one_ego)].x) < 1e-6f,
         "selective reset modified another world");
 
+    std::vector<std::uint8_t> modes(
+        static_cast<std::size_t>(2 * source.capacities.max_agents),
+        static_cast<std::uint8_t>(ControlMode::Auto));
+    std::vector<AgentAction> residual_actions(
+        modes.size(), AgentAction{0.0f, 0.0f});
+    modes[0] = static_cast<std::uint8_t>(ControlMode::Residual);
+    residual_actions[0] = AgentAction{0.25f, 0.02f};
+    simulator.set_control_modes(modes);
+    simulator.set_actions(residual_actions);
+    simulator.step();
+    const SimSnapshot residual = simulator.copy_snapshot();
+    require(residual.control_modes[0] == static_cast<std::uint8_t>(ControlMode::Residual),
+            "residual control mode was not applied");
+    require(std::fabs(
+                residual.applied_actions[0].acceleration -
+                std::clamp(stepped.applied_actions[0].acceleration + 0.25f, -6.0f, 4.0f)) < 1e-5f,
+            "residual acceleration was not added to the automatic action");
+    require(std::fabs(
+                residual.applied_actions[0].steering -
+                std::clamp(stepped.applied_actions[0].steering + 0.02f, -0.6f, 0.6f)) < 1e-5f,
+            "residual steering was not added to the automatic action");
+
+    simulator.reset_worlds({0});
+
     std::vector<std::uint8_t> mask(
         static_cast<std::size_t>(2 * source.capacities.max_agents), 0);
     std::vector<AgentAction> actions(mask.size(), AgentAction{0.0f, 0.0f});
@@ -272,6 +296,8 @@ void test_events(RuntimeScene scene)
     const SimSnapshot snapshot = simulator.copy_snapshot();
     require(snapshot.events[0].collided_vehicle == 1, "vehicle collision was not detected");
     require(snapshot.events[1].collided_vehicle == 1, "paired vehicle collision was not detected");
+    require(snapshot.events[0].collided_ego == 1, "ego collision was not marked on ego");
+    require(snapshot.events[1].collided_ego == 1, "ego collision was not marked on attacker");
     require(snapshot.events[0].collided_road == 1, "road edge collision was not detected");
     require(snapshot.events[2].offroad == 1, "offroad event was not detected");
     require(snapshot.events[0].reached_goal == 1, "goal event was not detected");

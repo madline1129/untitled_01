@@ -106,7 +106,18 @@ void write_csv_header(std::ofstream &stream)
         << "x,y,yaw,vx,vy,acceleration,steering,"
         << "actual_acceleration,actual_steering,"
         << "longitudinal_velocity,lateral_velocity,yaw_rate,"
-        << "collided_vehicle,collided_road,offroad,reached_goal,world_done\n";
+        << "collided_vehicle,collided_ego,collided_road,offroad,reached_goal,world_done\n";
+}
+
+const char *control_mode_name(std::uint8_t mode)
+{
+    if (mode == static_cast<std::uint8_t>(ControlMode::Residual)) {
+        return "residual";
+    }
+    if (mode == static_cast<std::uint8_t>(ControlMode::Direct)) {
+        return "direct";
+    }
+    return "auto";
 }
 
 void write_snapshot(
@@ -130,13 +141,14 @@ void write_snapshot(
                 << agent << ','
                 << csv_string(scenes[static_cast<std::size_t>(world)].agent_ids[static_cast<std::size_t>(agent)]) << ','
                 << static_cast<int>(snapshot.valid[static_cast<std::size_t>(index)]) << ','
-                << (snapshot.external_control[static_cast<std::size_t>(index)] != 0 ? "external" : "auto") << ','
+                << control_mode_name(snapshot.control_modes[static_cast<std::size_t>(index)]) << ','
                 << state.x << ',' << state.y << ',' << state.yaw << ',' << state.vx << ',' << state.vy << ','
                 << action.acceleration << ',' << action.steering << ','
                 << dynamics.longitudinal_acceleration << ',' << dynamics.steering_angle << ','
                 << dynamics.longitudinal_velocity << ',' << dynamics.lateral_velocity << ','
                 << dynamics.yaw_rate << ','
-                << event.collided_vehicle << ',' << event.collided_road << ','
+                << event.collided_vehicle << ',' << event.collided_ego << ','
+                << event.collided_road << ','
                 << event.offroad << ',' << event.reached_goal << ','
                 << snapshot.world_done[static_cast<std::size_t>(world)] << '\n';
         }
@@ -201,6 +213,7 @@ int main(int argc, char **argv)
         write_snapshot(trace, snapshot, scenes, max_agents);
         int executed_steps = 0;
         int vehicle_collision_rows = 0;
+        int ego_collision_rows = 0;
         int road_collision_rows = 0;
         int offroad_rows = 0;
         for (int step = 0; step < rollout_steps && !all_worlds_done(snapshot); ++step) {
@@ -210,6 +223,7 @@ int main(int argc, char **argv)
             executed_steps += 1;
             for (const AgentEvent &event : snapshot.events) {
                 vehicle_collision_rows += event.collided_vehicle;
+                ego_collision_rows += event.collided_ego;
                 road_collision_rows += event.collided_road;
                 offroad_rows += event.offroad;
             }
@@ -227,6 +241,7 @@ int main(int argc, char **argv)
         summary["kinematic_speed_threshold"] = sim_config.kinematic_speed_threshold;
         summary["dynamic_speed_threshold"] = sim_config.dynamic_speed_threshold;
         summary["vehicle_collision_agent_steps"] = vehicle_collision_rows;
+        summary["ego_collision_agent_steps"] = ego_collision_rows;
         summary["road_collision_agent_steps"] = road_collision_rows;
         summary["offroad_agent_steps"] = offroad_rows;
         summary["external_agent_slots"] = arguments.external_agents;

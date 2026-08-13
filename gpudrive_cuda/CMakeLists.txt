@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.24)
 
 project(gpudrive_cuda LANGUAGES CXX CUDA)
 
+option(BUILD_TORCH_BINDINGS "Build the CUDA Tensor Python extension" OFF)
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CUDA_STANDARD 17)
@@ -20,6 +22,7 @@ add_library(runtime_scene STATIC
 )
 target_include_directories(runtime_scene PUBLIC src)
 target_link_libraries(runtime_scene PUBLIC nlohmann_json::nlohmann_json)
+set_target_properties(runtime_scene PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_compile_options(runtime_scene PRIVATE
     "$<$<COMPILE_LANGUAGE:CXX>:-Wall;-Wextra;-Wpedantic>"
 )
@@ -44,6 +47,38 @@ target_link_libraries(drive_sim_cli PRIVATE drive_simulator runtime_scene)
 set_target_properties(drive_sim_cli PROPERTIES
     CUDA_SEPARABLE_COMPILATION ON
 )
+
+if(BUILD_TORCH_BINDINGS)
+    find_package(Torch REQUIRED)
+    find_package(pybind11 CONFIG REQUIRED)
+    find_library(TORCH_PYTHON_LIBRARY torch_python
+        PATHS "${TORCH_INSTALL_PREFIX}/lib"
+        NO_DEFAULT_PATH
+        REQUIRED
+    )
+    separate_arguments(TORCH_CXX_FLAGS_LIST NATIVE_COMMAND "${TORCH_CXX_FLAGS}")
+
+    pybind11_add_module(gpudrive_cuda_torch MODULE
+        src/torch_bindings.cu
+    )
+    target_link_libraries(gpudrive_cuda_torch PRIVATE
+        drive_simulator
+        runtime_scene
+        ${TORCH_LIBRARIES}
+        ${TORCH_PYTHON_LIBRARY}
+    )
+    target_compile_definitions(gpudrive_cuda_torch PRIVATE
+        TORCH_EXTENSION_NAME=gpudrive_cuda_torch
+    )
+    target_compile_options(gpudrive_cuda_torch PRIVATE
+        ${TORCH_CXX_FLAGS_LIST}
+        "$<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>"
+    )
+    set_target_properties(gpudrive_cuda_torch PROPERTIES
+        CUDA_SEPARABLE_COMPILATION ON
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/python"
+    )
+endif()
 
 include(CTest)
 if(BUILD_TESTING)

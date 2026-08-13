@@ -1,0 +1,25 @@
+{
+  "checkpoint_interval": 100000,
+  "device": "cuda:0",
+  "log_interval": 10000,
+  "max_attackers": 16,
+  "num_worlds": 64,
+  "output_dir": "outputs/mappo_v0",
+  "ppo": {
+    "clip_coef": 0.2,
+    "entropy_coef": 0.01,
+    "gae_lambda": 0.95,
+    "gamma": 0.99,
+    "learning_rate": 0.0003,
+    "max_grad_norm": 0.5,
+    "num_minibatches": 4,
+    "rollout_steps": 128,
+    "target_kl": 0.02,
+    "update_epochs": 4,
+    "value_clip_coef": 0.2,
+    "value_coef": 0.5
+  },
+  "runtime_split": "dataset/nuplan/rl_runtime/runtime_split.json",
+  "seed": 42,
+  "total_world_steps": 5000000
+}

@@ -8,6 +8,10 @@ simulator。它直接读取 `scenario_pipeline compile-rl` 生成的
 [动态自行车模型复现指南](DYNAMIC_BICYCLE_REPRODUCTION.md)。
 真实场景的正式可视化流程见
 [TerraZero 风格 10 秒 Demo 工作站复现指南](TERRAZERO_STYLE_DEMO_REPRODUCTION.md)。
+多智能体训练流程见
+[MAPPO v0 工作站复现指南](MAPPO_TRAINING_REPRODUCTION.md)。
+单张 RTX 4090 24GB 的正式训练与 TensorBoard 使用见
+[RTX 4090 MAPPO 训练指南](RTX4090_MAPPO_TRAINING_GUIDE.md)。
 
 ## 流水线
 
@@ -27,21 +31,26 @@ trace.csv + summary.json
 rollout.gif + rollout.mp4 + final_frame.png
 ```
 
+训练模式在 simulator 之上增加 Torch CUDA bridge，使用最多 16 辆背景车、
+残差到完全接管的固定课程、参数共享 actor 和集中式 critic。reward 保持在
+Python 训练环境中，不写入 simulator 核心。
+
 ## 已实现的 Simulator 语义
 
 - 每个 world 独立加载场景、`dt`、episode 长度和 reset step。
 - 状态为 `[x, y, yaw, vx, vy]`，动作为 `[acceleration, steering]`。
 - 默认控制器优先跟踪 simulator-private `reference_future`，未来缺失时跟踪
   `agent_goal`；未来轨迹不会出现在 policy observation 中。
-- `external_control_mask` 可以让任意可控 Agent 改用外部动作。
+- `external_control_mask` 保持兼容并映射为完全接管；训练接口还支持
+  `AUTO / RESIDUAL / DIRECT` 三种逐 Agent 控制模式。
 - 车辆使用带侧偏力、轮胎力饱和和横摆响应的动态自行车模型；低速区与
   运动学模型平滑混合，行人和骑行者使用稳定的运动学回退。
 - 动作为目标加速度和目标前轮转角，执行器包含一阶响应、jerk 限制和转向
   速率限制；实际加速度、实际转角、纵横向速度和横摆角速度写入 trace。
 - nuPlan 不提供质量和轮胎标定。simulator 根据 `agent_type` 选择模型，并根据
   `length/width` 为车辆选择可配置的乘用车或大型车参数预设。
-- 车辆碰撞使用二维 OBB SAT；有地图时检测 road edge 和 drivable polygon
-  越界；碰撞只记录，不改变车辆状态，也不结束 world。
+- 车辆碰撞使用二维 OBB SAT，并单独输出 `collided_ego`；有地图时检测 road
+  edge 和 drivable polygon 越界；碰撞只记录，不改变车辆状态，也不结束 world。
 - 输出 self、最近 16 个 partner、最近 64 个 map segment 和当前交通灯观测。
 - `world_done` 只由 episode timeout 产生，不在 simulator 内计算 reward。
 
@@ -104,9 +113,9 @@ outputs/nuplan_cuda_demo/final_frame.png
 状态。`longitudinal_velocity/lateral_velocity/yaw_rate` 用于动力学验收；renderer
 采用16:9深色局部跟随视图，并忽略这些附加列。
 
-当前 mock runtime 的 `map_features=0` 且未来只有9.5秒，只适合短时功能测试，
-不适合正式可视化。用带 `--maps-root` 重新转换并编译的runtime会自动显示道路面、
-车道线、道路边界、交通灯和多类型Agent，不需要修改simulator。
+旧版 nuPlan mock runtime 的 `map_features=0` 且未来只有 9.5 秒，只适合短时
+功能测试。`gpudrive_cuda.rl.create_mock_runtime` 可以生成带简化道路和 4 辆背景车的
+10 秒训练 smoke scene；正式展示仍应使用带 `--maps-root` 编译的真实 runtime。
 
 ## 分步运行
 
@@ -168,9 +177,10 @@ gpudrive_cuda/build/runtime_loader_test \
 uv run --frozen python -m unittest gpudrive_cuda.tests.test_render_trace -v
 ```
 
-## 后续接 ADRL
+## 多智能体训练
 
-训练层只需要调用 `set_external_control_mask()` 选择攻击 Agent，按
-`[world, agent]` 写入 `AgentAction`，然后读取 observation 和 event buffer。
-目前没有 Python binding；后续可以在保持 `DriveSim` C++ API 不变的前提下
-增加 pybind11 或 PyTorch CUDA tensor 适配层。
+Torch 扩展接收 `[world, agent, 2]` CUDA Tensor，并直接返回状态、动力学、
+事件及 self/partner/map Tensor。`gpudrive_cuda.rl.AdversarialDrivingEnv` 负责选择
+最近 16 辆攻击车、奖励、termination 和课程；`gpudrive_cuda.rl.train` 实现
+共享 actor、集中式 critic、GAE 和 clipped PPO。完整命令与指标解释见
+[MAPPO_TRAINING_REPRODUCTION.md](MAPPO_TRAINING_REPRODUCTION.md)。

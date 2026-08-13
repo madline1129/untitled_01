@@ -2,6 +2,8 @@
 
 #include "runtime_scene.hpp"
 
+#include <cuda_runtime_api.h>
+
 #include <cstdint>
 #include <vector>
 
@@ -19,6 +21,12 @@ struct AgentState {
 struct AgentAction {
     float acceleration;
     float steering;
+};
+
+enum class ControlMode : std::uint8_t {
+    Auto = 0,
+    Residual = 1,
+    Direct = 2,
 };
 
 // 动态自行车模型的内部状态。速度分量使用车体坐标系。
@@ -70,6 +78,7 @@ struct Point3 {
 
 struct AgentEvent {
     int collided_vehicle;
+    int collided_ego;
     int collided_road;
     int offroad;
     int reached_goal;
@@ -161,8 +170,28 @@ struct SimSnapshot {
     std::vector<AgentEvent> events;
     std::vector<std::uint8_t> valid;
     std::vector<std::uint8_t> external_control;
+    std::vector<std::uint8_t> control_modes;
     std::vector<int> world_steps;
     std::vector<int> world_done;
+};
+
+// Torch 扩展通过这些稳定的设备指针构造 CUDA Tensor 视图。
+// 指针只在 DriveSim 生命周期内有效，调用 reset/step 不会改变地址。
+struct SimDeviceView {
+    const AgentState *states;
+    const VehicleDynamicsState *dynamics_states;
+    const AgentAction *applied_actions;
+    const AgentEvent *events;
+    const SelfObservation *self_observations;
+    const PartnerObservation *partner_observations;
+    const MapObservation *map_observations;
+    const std::uint8_t *valid;
+    const std::int32_t *agent_type;
+    const std::uint8_t *agent_is_ego;
+    const std::uint8_t *agent_controllable;
+    const std::uint8_t *control_modes;
+    const int *world_steps;
+    const int *world_done;
 };
 
 class DriveSim {
@@ -177,15 +206,20 @@ public:
 
     void reset();
     void reset_worlds(const std::vector<int> &world_ids);
+    void reset_worlds_device(const std::uint8_t *reset_mask, cudaStream_t stream);
     void set_external_control_mask(const std::vector<std::uint8_t> &mask);
+    void set_control_modes(const std::vector<std::uint8_t> &modes);
+    void set_control_modes_device(const std::uint8_t *modes, cudaStream_t stream);
     void set_actions(const std::vector<AgentAction> &actions);
     void step();
+    void step_device(const AgentAction *actions, cudaStream_t stream);
 
     SimSnapshot copy_snapshot() const;
     std::vector<SelfObservation> copy_self_observations() const;
     std::vector<PartnerObservation> copy_partner_observations() const;
     std::vector<MapObservation> copy_map_observations() const;
     std::vector<SignalObservation> copy_signal_observations() const;
+    SimDeviceView device_view() const;
 
     int num_worlds() const { return num_worlds_; }
     int max_agents() const { return capacities_.max_agents; }
@@ -193,7 +227,9 @@ public:
     int map_observation_count() const { return config_.map_observations; }
 
 private:
-    void build_observations();
+    void reset_worlds_impl(const std::uint8_t *reset_mask, cudaStream_t stream);
+    void step_impl(const AgentAction *actions, cudaStream_t stream);
+    void build_observations(cudaStream_t stream);
     void allocate_and_upload(const std::vector<RuntimeScene> &scenes);
     void release() noexcept;
 
@@ -243,11 +279,12 @@ private:
     SignalObservation *d_signal_observations_ = nullptr;
     int *d_world_steps_ = nullptr;
     int *d_world_done_ = nullptr;
-    int *d_world_reset_mask_ = nullptr;
+    std::uint8_t *d_world_reset_mask_ = nullptr;
 };
 
 static_assert(sizeof(AgentState) == sizeof(float) * 5, "AgentState must match runtime state layout");
 static_assert(sizeof(AgentAction) == sizeof(float) * 2, "AgentAction must be tightly packed");
+static_assert(sizeof(AgentEvent) == sizeof(int) * 5, "AgentEvent must be tightly packed");
 static_assert(
     sizeof(VehicleDynamicsState) == sizeof(float) * 5,
     "VehicleDynamicsState must be tightly packed");

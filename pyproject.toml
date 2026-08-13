@@ -14,3 +14,27 @@ dependencies = [
 [tool.uv]
 package = false
 required-version = ">=0.12.0"
+
+[dependency-groups]
+train = [
+    "numpy>=1.26,<3",
+    "pybind11>=2.13,<4",
+    "tensorboard>=2.17,<3",
+    "torch>=2.4,<2.7",
+]
+
+[[tool.uv.index]]
+name = "pytorch-cuda"
+url = "https://download.pytorch.org/whl/cu124"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cuda", marker = "platform_system == 'Linux'" },
+    { index = "pytorch-cpu", marker = "platform_system != 'Linux'" },
+]

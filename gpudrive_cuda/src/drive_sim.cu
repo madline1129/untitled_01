@@ -20,6 +20,9 @@ constexpr int kMapTypeRoadblockConnector = 9;
 constexpr int kGeometryPolygon = 3;
 constexpr int kTrafficLightStop = 1;
 constexpr int kTrafficLightCaution = 2;
+constexpr std::uint8_t kControlAuto = static_cast<std::uint8_t>(ControlMode::Auto);
+constexpr std::uint8_t kControlResidual = static_cast<std::uint8_t>(ControlMode::Residual);
+constexpr std::uint8_t kControlDirect = static_cast<std::uint8_t>(ControlMode::Direct);
 
 void cuda_check(cudaError_t result, const char *expression, const char *file, int line)
 {
@@ -313,7 +316,7 @@ __device__ bool point_in_polygon(
 __global__ void reset_world_kernel(
     int *world_steps,
     int *world_done,
-    const int *reset_mask,
+    const std::uint8_t *reset_mask,
     int num_worlds)
 {
     const int world = blockIdx.x * blockDim.x + threadIdx.x;
@@ -331,9 +334,9 @@ __global__ void reset_agent_kernel(
     VehicleDynamicsState *dynamics_states,
     AgentAction *external_actions,
     AgentAction *applied_actions,
-    std::uint8_t *external_control,
+    std::uint8_t *control_modes,
     AgentEvent *events,
-    const int *reset_mask,
+    const std::uint8_t *reset_mask,
     int total_agents,
     int max_agents)
 {
@@ -354,16 +357,16 @@ __global__ void reset_agent_kernel(
     };
     external_actions[index] = AgentAction{0.0f, 0.0f};
     applied_actions[index] = AgentAction{0.0f, 0.0f};
-    external_control[index] = 0;
-    events[index] = AgentEvent{0, 0, 0, 0};
+    control_modes[index] = kControlAuto;
+    events[index] = AgentEvent{0, 0, 0, 0, 0};
     if (initial_valid[index] == 0) {
         states[index] = AgentState{0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
         dynamics_states[index] = VehicleDynamicsState{0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
     }
 }
 
-__global__ void sanitize_external_control_kernel(
-    std::uint8_t *external_control,
+__global__ void sanitize_control_modes_kernel(
+    std::uint8_t *control_modes,
     const std::uint8_t *initial_valid,
     const std::uint8_t *controllable,
     int total_agents)
@@ -372,8 +375,34 @@ __global__ void sanitize_external_control_kernel(
     if (index >= total_agents) {
         return;
     }
-    external_control[index] = static_cast<std::uint8_t>(
-        external_control[index] != 0 && initial_valid[index] != 0 && controllable[index] != 0);
+    const std::uint8_t mode = control_modes[index];
+    const bool valid_mode = mode == kControlAuto || mode == kControlResidual ||
+                            mode == kControlDirect;
+    control_modes[index] = static_cast<std::uint8_t>(
+        valid_mode && initial_valid[index] != 0 && controllable[index] != 0
+            ? mode
+            : kControlAuto);
+}
+
+__device__ AgentAction merge_control_action(
+    AgentAction automatic_action,
+    AgentAction external_action,
+    std::uint8_t control_mode,
+    float min_acceleration,
+    float max_acceleration,
+    float max_steering)
+{
+    AgentAction result = automatic_action;
+    if (control_mode == kControlResidual) {
+        result.acceleration += external_action.acceleration;
+        result.steering += external_action.steering;
+    } else if (control_mode == kControlDirect) {
+        result = external_action;
+    }
+    result.acceleration = clamp_value(
+        result.acceleration, min_acceleration, max_acceleration);
+    result.steering = clamp_value(result.steering, -max_steering, max_steering);
+    return result;
 }
 
 __global__ void controller_kernel(
@@ -394,7 +423,7 @@ __global__ void controller_kernel(
     const int *world_steps,
     const int *world_done,
     const AgentAction *external_actions,
-    const std::uint8_t *external_control,
+    const std::uint8_t *control_modes,
     AgentAction *applied_actions,
     int total_agents,
     int max_agents,
@@ -416,13 +445,6 @@ __global__ void controller_kernel(
     const int agent = index % max_agents;
     if (valid[index] == 0 || world_done[world] != 0) {
         applied_actions[index] = AgentAction{0.0f, 0.0f};
-        return;
-    }
-    if (external_control[index] != 0) {
-        AgentAction action = external_actions[index];
-        action.acceleration = clamp_value(action.acceleration, min_acceleration, max_acceleration);
-        action.steering = clamp_value(action.steering, -max_steering, max_steering);
-        applied_actions[index] = action;
         return;
     }
 
@@ -448,7 +470,13 @@ __global__ void controller_kernel(
         has_target = true;
     }
     if (!has_target) {
-        applied_actions[index] = AgentAction{0.0f, 0.0f};
+        applied_actions[index] = merge_control_action(
+            AgentAction{0.0f, 0.0f},
+            external_actions[index],
+            control_modes[index],
+            min_acceleration,
+            max_acceleration,
+            max_steering);
         return;
     }
 
@@ -498,7 +526,13 @@ __global__ void controller_kernel(
     AgentAction action;
     action.acceleration = clamp_value(2.0f * (desired_speed - speed), min_acceleration, max_acceleration);
     action.steering = clamp_value(steering, -max_steering, max_steering);
-    applied_actions[index] = action;
+    applied_actions[index] = merge_control_action(
+        action,
+        external_actions[index],
+        control_modes[index],
+        min_acceleration,
+        max_acceleration,
+        max_steering);
 }
 
 __global__ void dynamics_kernel(
@@ -697,6 +731,7 @@ __global__ void collision_kernel(
     const AgentState *states,
     const AgentDimensions *dimensions,
     const std::uint8_t *valid,
+    const std::uint8_t *is_ego,
     AgentEvent *events,
     int num_worlds,
     int max_agents)
@@ -722,6 +757,10 @@ __global__ void collision_kernel(
     if (obb_overlap(states[left], dimensions[left], states[right], dimensions[right])) {
         atomicExch(&events[left].collided_vehicle, 1);
         atomicExch(&events[right].collided_vehicle, 1);
+        if (is_ego[left] != 0 || is_ego[right] != 0) {
+            atomicExch(&events[left].collided_ego, 1);
+            atomicExch(&events[right].collided_ego, 1);
+        }
     }
 }
 
@@ -1260,7 +1299,7 @@ void DriveSim::reset()
 
 void DriveSim::reset_worlds(const std::vector<int> &world_ids)
 {
-    std::vector<int> reset_mask(static_cast<std::size_t>(num_worlds_), 0);
+    std::vector<std::uint8_t> reset_mask(static_cast<std::size_t>(num_worlds_), 0);
     for (int world : world_ids) {
         if (world < 0 || world >= num_worlds_) {
             throw std::runtime_error("reset_worlds received an invalid world index");
@@ -1270,13 +1309,27 @@ void DriveSim::reset_worlds(const std::vector<int> &world_ids)
     CUDA_CHECK(cudaMemcpy(
         d_world_reset_mask_,
         reset_mask.data(),
-        reset_mask.size() * sizeof(int),
+        reset_mask.size() * sizeof(std::uint8_t),
         cudaMemcpyHostToDevice));
+    reset_worlds_impl(d_world_reset_mask_, 0);
+    CUDA_CHECK(cudaStreamSynchronize(0));
+}
+
+void DriveSim::reset_worlds_device(const std::uint8_t *reset_mask, cudaStream_t stream)
+{
+    if (reset_mask == nullptr) {
+        throw std::runtime_error("reset_worlds_device received a null reset mask");
+    }
+    reset_worlds_impl(reset_mask, stream);
+}
+
+void DriveSim::reset_worlds_impl(const std::uint8_t *reset_mask, cudaStream_t stream)
+{
     constexpr int threads = 128;
-    reset_world_kernel<<<(num_worlds_ + threads - 1) / threads, threads>>>(
-        d_world_steps_, d_world_done_, d_world_reset_mask_, num_worlds_);
+    reset_world_kernel<<<(num_worlds_ + threads - 1) / threads, threads, 0, stream>>>(
+        d_world_steps_, d_world_done_, reset_mask, num_worlds_);
     check_kernel_launch();
-    reset_agent_kernel<<<(total_agents_ + threads - 1) / threads, threads>>>(
+    reset_agent_kernel<<<(total_agents_ + threads - 1) / threads, threads, 0, stream>>>(
         d_initial_states_,
         d_initial_valid_,
         d_states_,
@@ -1285,11 +1338,11 @@ void DriveSim::reset_worlds(const std::vector<int> &world_ids)
         d_applied_actions_,
         d_external_control_,
         d_events_,
-        d_world_reset_mask_,
+        reset_mask,
         total_agents_,
         capacities_.max_agents);
     check_kernel_launch();
-    build_observations();
+    build_observations(stream);
 }
 
 void DriveSim::set_external_control_mask(const std::vector<std::uint8_t> &mask)
@@ -1297,16 +1350,45 @@ void DriveSim::set_external_control_mask(const std::vector<std::uint8_t> &mask)
     if (mask.size() != static_cast<std::size_t>(total_agents_)) {
         throw std::runtime_error("external control mask size does not match [worlds, agents]");
     }
+    std::vector<std::uint8_t> modes(mask.size(), kControlAuto);
+    for (std::size_t index = 0; index < mask.size(); ++index) {
+        modes[index] = mask[index] != 0 ? kControlDirect : kControlAuto;
+    }
+    set_control_modes(modes);
+}
+
+void DriveSim::set_control_modes(const std::vector<std::uint8_t> &modes)
+{
+    if (modes.size() != static_cast<std::size_t>(total_agents_)) {
+        throw std::runtime_error("control mode size does not match [worlds, agents]");
+    }
     CUDA_CHECK(cudaMemcpy(
         d_external_control_,
-        mask.data(),
-        mask.size() * sizeof(std::uint8_t),
+        modes.data(),
+        modes.size() * sizeof(std::uint8_t),
         cudaMemcpyHostToDevice));
     constexpr int threads = 128;
-    sanitize_external_control_kernel<<<(total_agents_ + threads - 1) / threads, threads>>>(
+    sanitize_control_modes_kernel<<<(total_agents_ + threads - 1) / threads, threads>>>(
         d_external_control_, d_initial_valid_, d_agent_controllable_, total_agents_);
     check_kernel_launch();
     CUDA_CHECK(cudaDeviceSynchronize());
+}
+
+void DriveSim::set_control_modes_device(const std::uint8_t *modes, cudaStream_t stream)
+{
+    if (modes == nullptr) {
+        throw std::runtime_error("set_control_modes_device received a null mode tensor");
+    }
+    CUDA_CHECK(cudaMemcpyAsync(
+        d_external_control_,
+        modes,
+        static_cast<std::size_t>(total_agents_) * sizeof(std::uint8_t),
+        cudaMemcpyDeviceToDevice,
+        stream));
+    constexpr int threads = 128;
+    sanitize_control_modes_kernel<<<(total_agents_ + threads - 1) / threads, threads, 0, stream>>>(
+        d_external_control_, d_initial_valid_, d_agent_controllable_, total_agents_);
+    check_kernel_launch();
 }
 
 void DriveSim::set_actions(const std::vector<AgentAction> &actions)
@@ -1323,9 +1405,27 @@ void DriveSim::set_actions(const std::vector<AgentAction> &actions)
 
 void DriveSim::step()
 {
+    step_impl(d_external_actions_, 0);
+    CUDA_CHECK(cudaStreamSynchronize(0));
+}
+
+void DriveSim::step_device(const AgentAction *actions, cudaStream_t stream)
+{
+    if (actions == nullptr) {
+        throw std::runtime_error("step_device received a null action tensor");
+    }
+    step_impl(actions, stream);
+}
+
+void DriveSim::step_impl(const AgentAction *actions, cudaStream_t stream)
+{
     constexpr int threads = 128;
-    CUDA_CHECK(cudaMemset(d_events_, 0, static_cast<std::size_t>(total_agents_) * sizeof(AgentEvent)));
-    controller_kernel<<<(total_agents_ + threads - 1) / threads, threads>>>(
+    CUDA_CHECK(cudaMemsetAsync(
+        d_events_,
+        0,
+        static_cast<std::size_t>(total_agents_) * sizeof(AgentEvent),
+        stream));
+    controller_kernel<<<(total_agents_ + threads - 1) / threads, threads, 0, stream>>>(
         d_states_,
         d_initial_valid_,
         d_agent_dimensions_,
@@ -1342,7 +1442,7 @@ void DriveSim::step()
         d_traffic_light_counts_,
         d_world_steps_,
         d_world_done_,
-        d_external_actions_,
+        actions,
         d_external_control_,
         d_applied_actions_,
         total_agents_,
@@ -1357,7 +1457,7 @@ void DriveSim::step()
         config_.max_abs_steering,
         config_.red_light_stop_distance);
     check_kernel_launch();
-    dynamics_kernel<<<(total_agents_ + threads - 1) / threads, threads>>>(
+    dynamics_kernel<<<(total_agents_ + threads - 1) / threads, threads, 0, stream>>>(
         d_states_,
         d_dynamics_states_,
         d_applied_actions_,
@@ -1383,15 +1483,16 @@ void DriveSim::step()
     check_kernel_launch();
 
     const int total_pairs = num_worlds_ * capacities_.max_agents * capacities_.max_agents;
-    collision_kernel<<<(total_pairs + threads - 1) / threads, threads>>>(
+    collision_kernel<<<(total_pairs + threads - 1) / threads, threads, 0, stream>>>(
         d_states_,
         d_agent_dimensions_,
         d_initial_valid_,
+        d_agent_is_ego_,
         d_events_,
         num_worlds_,
         capacities_.max_agents);
     check_kernel_launch();
-    road_and_goal_kernel<<<(total_agents_ + threads - 1) / threads, threads>>>(
+    road_and_goal_kernel<<<(total_agents_ + threads - 1) / threads, threads, 0, stream>>>(
         d_states_,
         d_initial_valid_,
         d_agent_dimensions_,
@@ -1411,16 +1512,16 @@ void DriveSim::step()
         capacities_.max_map_points,
         config_.goal_threshold);
     check_kernel_launch();
-    advance_world_kernel<<<(num_worlds_ + threads - 1) / threads, threads>>>(
+    advance_world_kernel<<<(num_worlds_ + threads - 1) / threads, threads, 0, stream>>>(
         d_world_steps_, d_world_done_, d_episode_steps_, num_worlds_);
     check_kernel_launch();
-    build_observations();
+    build_observations(stream);
 }
 
-void DriveSim::build_observations()
+void DriveSim::build_observations(cudaStream_t stream)
 {
     constexpr int threads = 128;
-    self_observation_kernel<<<(total_agents_ + threads - 1) / threads, threads>>>(
+    self_observation_kernel<<<(total_agents_ + threads - 1) / threads, threads, 0, stream>>>(
         d_states_,
         d_initial_valid_,
         d_agent_dimensions_,
@@ -1432,7 +1533,7 @@ void DriveSim::build_observations()
         total_agents_,
         capacities_.max_agents);
     check_kernel_launch();
-    partner_observation_kernel<<<(total_agents_ + threads - 1) / threads, threads>>>(
+    partner_observation_kernel<<<(total_agents_ + threads - 1) / threads, threads, 0, stream>>>(
         d_states_,
         d_initial_valid_,
         d_agent_dimensions_,
@@ -1442,7 +1543,7 @@ void DriveSim::build_observations()
         capacities_.max_agents,
         config_.partner_observations);
     check_kernel_launch();
-    map_observation_kernel<<<(total_agents_ + threads - 1) / threads, threads>>>(
+    map_observation_kernel<<<(total_agents_ + threads - 1) / threads, threads, 0, stream>>>(
         d_states_,
         d_initial_valid_,
         d_map_points_,
@@ -1461,7 +1562,7 @@ void DriveSim::build_observations()
         config_.map_observations);
     check_kernel_launch();
     const int total_signals = num_worlds_ * capacities_.max_traffic_lights;
-    signal_observation_kernel<<<(total_signals + threads - 1) / threads, threads>>>(
+    signal_observation_kernel<<<(total_signals + threads - 1) / threads, threads, 0, stream>>>(
         d_traffic_light_feature_index_,
         d_traffic_light_state_,
         d_traffic_light_valid_,
@@ -1472,11 +1573,11 @@ void DriveSim::build_observations()
         capacities_.max_future_steps,
         capacities_.max_traffic_lights);
     check_kernel_launch();
-    CUDA_CHECK(cudaDeviceSynchronize());
 }
 
 SimSnapshot DriveSim::copy_snapshot() const
 {
+    CUDA_CHECK(cudaDeviceSynchronize());
     SimSnapshot snapshot;
     snapshot.states = download_device(d_states_, static_cast<std::size_t>(total_agents_));
     snapshot.applied_actions = download_device(
@@ -1485,8 +1586,13 @@ SimSnapshot DriveSim::copy_snapshot() const
         d_dynamics_states_, static_cast<std::size_t>(total_agents_));
     snapshot.events = download_device(d_events_, static_cast<std::size_t>(total_agents_));
     snapshot.valid = download_device(d_initial_valid_, static_cast<std::size_t>(total_agents_));
-    snapshot.external_control = download_device(
+    snapshot.control_modes = download_device(
         d_external_control_, static_cast<std::size_t>(total_agents_));
+    snapshot.external_control.resize(snapshot.control_modes.size(), 0);
+    for (std::size_t index = 0; index < snapshot.control_modes.size(); ++index) {
+        snapshot.external_control[index] = static_cast<std::uint8_t>(
+            snapshot.control_modes[index] != kControlAuto);
+    }
     snapshot.world_steps = download_device(d_world_steps_, static_cast<std::size_t>(num_worlds_));
     snapshot.world_done = download_device(d_world_done_, static_cast<std::size_t>(num_worlds_));
     return snapshot;
@@ -1494,11 +1600,13 @@ SimSnapshot DriveSim::copy_snapshot() const
 
 std::vector<SelfObservation> DriveSim::copy_self_observations() const
 {
+    CUDA_CHECK(cudaDeviceSynchronize());
     return download_device(d_self_observations_, static_cast<std::size_t>(total_agents_));
 }
 
 std::vector<PartnerObservation> DriveSim::copy_partner_observations() const
 {
+    CUDA_CHECK(cudaDeviceSynchronize());
     return download_device(
         d_partner_observations_,
         static_cast<std::size_t>(total_agents_) * config_.partner_observations);
@@ -1506,6 +1614,7 @@ std::vector<PartnerObservation> DriveSim::copy_partner_observations() const
 
 std::vector<MapObservation> DriveSim::copy_map_observations() const
 {
+    CUDA_CHECK(cudaDeviceSynchronize());
     return download_device(
         d_map_observations_,
         static_cast<std::size_t>(total_agents_) * config_.map_observations);
@@ -1513,7 +1622,28 @@ std::vector<MapObservation> DriveSim::copy_map_observations() const
 
 std::vector<SignalObservation> DriveSim::copy_signal_observations() const
 {
+    CUDA_CHECK(cudaDeviceSynchronize());
     return download_device(
         d_signal_observations_,
         static_cast<std::size_t>(num_worlds_) * capacities_.max_traffic_lights);
+}
+
+SimDeviceView DriveSim::device_view() const
+{
+    return SimDeviceView{
+        d_states_,
+        d_dynamics_states_,
+        d_applied_actions_,
+        d_events_,
+        d_self_observations_,
+        d_partner_observations_,
+        d_map_observations_,
+        d_initial_valid_,
+        d_agent_type_,
+        d_agent_is_ego_,
+        d_agent_controllable_,
+        d_external_control_,
+        d_world_steps_,
+        d_world_done_,
+    };
 }

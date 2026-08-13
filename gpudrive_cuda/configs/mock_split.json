@@ -1,0 +1,13 @@
+{
+  "eval": [
+    "mock_nuplan_00100000"
+  ],
+  "min_attackers": 2,
+  "require_map": false,
+  "runtime_root": "../../dataset/nuplan/rl_runtime",
+  "schema_version": "rl-runtime-split-1.0",
+  "seed": 42,
+  "train": [
+    "mock_nuplan_00100000"
+  ]
+}
