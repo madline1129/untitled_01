@@ -3,6 +3,10 @@
 本文用于在一张 RTX 4090 24GB 上训练 DangerMaker MAPPO，并通过 TensorBoard
 读取训练日志。第一版固定 ego 的参考轨迹控制器，只训练最多 16 辆背景攻击车。
 
+如果目前还没有满足 64/16 划分的真实 RuntimeScenario，请先按照
+[nuPlan 批量场景转换到 RTX 4090 训练指南](NUPLAN_BATCH_CONVERSION_AND_TRAINING.md)
+完成原始 SQLite、CanonicalScenario、RuntimeScenario 和 split 的准备。
+
 ## 1. 默认训练规格
 
 专用配置为 `gpudrive_cuda/configs/mappo_rtx4090.json`：
@@ -50,6 +54,8 @@ PY
 编译扩展时，本机 `nvcc` 最好也是 12.4，同一 CUDA 主版本是最低要求。
 
 ## 3. 准备 RuntimeScenario split
+
+从原始 nuPlan SQLite 开始时，不要直接跳到本节；请使用上面的批量转换指南。
 
 训练配置读取：
 

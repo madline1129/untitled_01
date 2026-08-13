@@ -3,6 +3,8 @@
 单张 RTX 4090 24GB 请优先使用
 [RTX 4090 MAPPO 训练指南](RTX4090_MAPPO_TRAINING_GUIDE.md)，其中包含专用配置、
 显存策略、完整 TensorBoard 指标和 SSH 访问方法。
+真实训练场景不足时，先使用
+[nuPlan 批量场景转换到 RTX 4090 训练指南](NUPLAN_BATCH_CONVERSION_AND_TRAINING.md)。
 
 本文覆盖当前独立 CUDA simulator 的强化学习训练流水线：
 

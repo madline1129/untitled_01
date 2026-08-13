@@ -12,6 +12,9 @@ simulator。它直接读取 `scenario_pipeline compile-rl` 生成的
 [MAPPO v0 工作站复现指南](MAPPO_TRAINING_REPRODUCTION.md)。
 单张 RTX 4090 24GB 的正式训练与 TensorBoard 使用见
 [RTX 4090 MAPPO 训练指南](RTX4090_MAPPO_TRAINING_GUIDE.md)。
+若工作站目前只有单场景 smoke runtime，先按
+[nuPlan 批量场景转换与训练指南](NUPLAN_BATCH_CONVERSION_AND_TRAINING.md)
+准备 64 个训练场景和 16 个不重复评估场景。
 
 ## 流水线
 
