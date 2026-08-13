@@ -7,7 +7,7 @@ RuntimeScenario v1
     -> CUDA 自动控制或外部动作
     -> 混合动态自行车模型
     -> trace.csv + summary.json
-    -> rollout.gif + final_frame.png
+    -> rollout.gif + rollout.mp4 + final_frame.png
 ```
 
 当前实现保持 `AgentState=[x,y,yaw,vx,vy]` 和
@@ -126,8 +126,8 @@ RuntimeScenario loader 测试
 CUDA 动力学集成测试
 10 步双 world rollout
 CSV 动力学字段检查
-GIF 和 PNG 渲染
-GIF 帧数检查
+GIF、MP4 和 PNG 渲染
+GIF/MP4 帧数及播放时长检查
 ```
 
 默认输出：
@@ -136,6 +136,7 @@ GIF 帧数检查
 outputs/gpudrive_cuda_test/trace.csv
 outputs/gpudrive_cuda_test/summary.json
 outputs/gpudrive_cuda_test/rollout.gif
+outputs/gpudrive_cuda_test/rollout.mp4
 outputs/gpudrive_cuda_test/final_frame.png
 ```
 
@@ -175,9 +176,12 @@ uv run --frozen python gpudrive_cuda/tools/render_trace.py \
   --runtime "$RUNTIME_PATH" \
   --trace "$OUTPUT_DIR/trace.csv" \
   --output "$OUTPUT_DIR/rollout.gif" \
+  --mp4-output "$OUTPUT_DIR/rollout.mp4" \
   --final-png "$OUTPUT_DIR/final_frame.png" \
   --world 0 \
-  --fps 10
+  --fps 10 \
+  --mp4-fps 20 \
+  --duration 5
 ```
 
 `acceleration/steering` 是限幅后的目标命令，实际执行器状态位于：
@@ -203,12 +207,14 @@ import math
 import sys
 from pathlib import Path
 
+import imageio_ffmpeg
 from PIL import Image
 
 root = Path(sys.argv[1])
 trace_path = root / "trace.csv"
 summary_path = root / "summary.json"
 gif_path = root / "rollout.gif"
+mp4_path = root / "rollout.mp4"
 png_path = root / "final_frame.png"
 
 summary = json.loads(summary_path.read_text(encoding="utf-8"))
@@ -239,15 +245,18 @@ displacement = math.hypot(
 )
 assert displacement > 0.01
 
-steps = {int(row["step"]) for row in ego}
 with Image.open(gif_path) as animation:
-    assert animation.n_frames == len(steps)
+    assert animation.size == (1600, 900)
+    assert animation.n_frames == 50
+mp4_frames, mp4_seconds = imageio_ffmpeg.count_frames_and_secs(str(mp4_path))
+assert mp4_frames == 100
+assert abs(mp4_seconds - 5.0) <= 0.1
 with Image.open(png_path) as image:
-    image.verify()
+    assert image.size == (1600, 900)
 
 print(f"model={summary['dynamics_model']}")
-print(f"steps={len(steps)} displacement={displacement:.3f}m")
-print(f"gif={gif_path} png={png_path}")
+print(f"steps={len({int(row['step']) for row in ego})} displacement={displacement:.3f}m")
+print(f"gif={gif_path} mp4={mp4_path} png={png_path}")
 PY
 ```
 
@@ -259,8 +268,8 @@ PY
 - 制动后纵向速度不会变成负数。
 - 乘用车与大型车在相同动作下具有不同横摆响应。
 - `summary.json` 中 `dynamics_model` 为 `hybrid_dynamic_bicycle`。
-- GIF 帧数等于 trace 中对应 world 的 step 数。
-- `rollout.gif` 和 `final_frame.png` 均非空且能被 Pillow 打开。
+- GIF 帧数等于 `duration * 10`，MP4 帧数等于 `duration * 20`。
+- `rollout.gif`、`rollout.mp4` 和 `final_frame.png` 均非空且可读取。
 
 mock runtime 的 `map_features=0`，因此 GIF 没有道路底图属于正常现象。真实
 RuntimeScenario 包含地图 feature 时，renderer 会自动绘制道路几何。

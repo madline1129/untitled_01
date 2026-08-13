@@ -6,6 +6,8 @@ simulator。它直接读取 `scenario_pipeline compile-rl` 生成的
 
 动态自行车模型的完整服务器复现步骤见
 [动态自行车模型复现指南](DYNAMIC_BICYCLE_REPRODUCTION.md)。
+真实场景的正式可视化流程见
+[TerraZero 风格 10 秒 Demo 工作站复现指南](TERRAZERO_STYLE_DEMO_REPRODUCTION.md)。
 
 ## 流水线
 
@@ -22,7 +24,7 @@ CUDA reset / controller / dynamics / events / observations
 trace.csv + summary.json
         │ render_trace.py
         ▼
-rollout.gif + final_frame.png
+rollout.gif + rollout.mp4 + final_frame.png
 ```
 
 ## 已实现的 Simulator 语义
@@ -55,7 +57,7 @@ NVIDIA GPU + CUDA toolkit（需要 nvcc）
 C++17 compiler
 ```
 
-Python 3.10、CMake、Ninja、Matplotlib 和 Pillow 由仓库根目录的 uv
+Python 3.10、CMake、Ninja、Matplotlib、Pillow 和 imageio-ffmpeg 由仓库根目录的 uv
 环境统一管理。新服务器先安装 uv：
 
 ```bash
@@ -69,18 +71,20 @@ bash gpudrive_cuda/scripts/setup_uv_env.sh
 `uv sync --frozen` 会严格使用仓库提交的 `uv.lock` 创建 `.venv`。
 `nlohmann/json` 已在仓库 `gpudrive/external/json` 中，不需要额外下载。
 
-这个 uv 环境覆盖当前 `RuntimeScenario -> CUDA simulator -> GIF` 阶段。
+这个 uv 环境覆盖当前 `RuntimeScenario -> CUDA simulator -> GIF/MP4` 阶段。
 原始 nuPlan HD map 提取所需的 `nuplan-devkit`，以及 Waymo TFRecord 转换所需的
 TensorFlow/Waymo SDK 暂未放入该环境；当前 mock runtime 和 CUDA simulator
 运行不需要它们，后续处理真实原始数据时再建立独立数据转换环境。
 
-## 一键运行 mock nuPlan
+## 一键生成 10 秒真实 nuPlan Demo
 
-在仓库根目录执行：
+正式展示需要地图非空且至少包含10秒future的真实RuntimeScenario。在仓库根目录执行：
 
 ```bash
+export RUNTIME_SCENE_DIR="/data/$USER/runtime/real_nuplan_scene"
+
 bash gpudrive_cuda/scripts/run_nuplan_demo.sh \
-  dataset/nuplan/rl_runtime/mock_nuplan_00100000 \
+  "$RUNTIME_SCENE_DIR" \
   outputs/nuplan_cuda_demo \
   1
 ```
@@ -91,17 +95,18 @@ bash gpudrive_cuda/scripts/run_nuplan_demo.sh \
 outputs/nuplan_cuda_demo/trace.csv
 outputs/nuplan_cuda_demo/summary.json
 outputs/nuplan_cuda_demo/rollout.gif
+outputs/nuplan_cuda_demo/rollout.mp4
 outputs/nuplan_cuda_demo/final_frame.png
 ```
 
 `trace.csv` 中的 `acceleration/steering` 是限幅后的控制命令，
 `actual_acceleration/actual_steering` 是经过执行器响应后真正进入动力学模型的
-状态。`longitudinal_velocity/lateral_velocity/yaw_rate` 用于动力学验收；GIF
-保持简洁俯视样式并忽略这些附加列。
+状态。`longitudinal_velocity/lateral_velocity/yaw_rate` 用于动力学验收；renderer
+采用16:9深色局部跟随视图，并忽略这些附加列。
 
-当前 mock runtime 的 `map_features=0`，因此动画会显示车辆、目标和轨迹，
-但没有道路底图。用带 `--maps-root` 重新转换并编译的 runtime 会自动显示地图，
-不需要修改 simulator。
+当前 mock runtime 的 `map_features=0` 且未来只有9.5秒，只适合短时功能测试，
+不适合正式可视化。用带 `--maps-root` 重新转换并编译的runtime会自动显示道路面、
+车道线、道路边界、交通灯和多类型Agent，不需要修改simulator。
 
 ## 分步运行
 
@@ -137,9 +142,13 @@ gpudrive_cuda/build/drive_sim_cli \
 
 ```bash
 uv run --frozen python gpudrive_cuda/tools/render_trace.py \
-  --runtime dataset/nuplan/rl_runtime/mock_nuplan_00100000 \
+  --runtime "$RUNTIME_SCENE_DIR" \
   --trace outputs/nuplan_cuda_demo/trace.csv \
-  --output outputs/nuplan_cuda_demo/rollout.gif
+  --output outputs/nuplan_cuda_demo/rollout.gif \
+  --mp4-output outputs/nuplan_cuda_demo/rollout.mp4 \
+  --final-png outputs/nuplan_cuda_demo/final_frame.png \
+  --duration 10 \
+  --view follow
 ```
 
 ## 测试

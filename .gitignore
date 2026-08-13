@@ -55,4 +55,6 @@ gpudrive/external/madrona/external/madrona-toolchain/bundled-toolchain/
 # Logs and local runtime files
 *.log
 *.save
+.~*
 /dev_logs/
+/dynamic_bicycle_repro/

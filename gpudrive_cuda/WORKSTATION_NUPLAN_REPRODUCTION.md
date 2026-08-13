@@ -15,7 +15,10 @@
 你现在位于一台 NVIDIA Linux 工作站上的本仓库根目录。仓库包含：
 
 - scenario_pipeline：nuPlan SQLite -> CanonicalScenario -> RuntimeScenario
-- gpudrive_cuda：RuntimeScenario -> CUDA simulator -> CSV/JSON -> GIF/PNG
+- gpudrive_cuda：RuntimeScenario -> CUDA simulator -> CSV/JSON -> GIF/MP4/PNG
+
+正式的10秒TerraZero风格GIF/MP4展示流程另见
+`gpudrive_cuda/TERRAZERO_STYLE_DEMO_REPRODUCTION.md`。
 
 请不要只给方案，直接在当前工作站把“真实 nuPlan 数据 -> CUDA simulator”完整复现并运行成功。
 
@@ -26,7 +29,7 @@
   -> RuntimeScenario
   -> CUDA simulator
   -> trace.csv / summary.json
-  -> rollout.gif / final_frame.png
+  -> rollout.gif / rollout.mp4 / final_frame.png
 
 约束：
 
@@ -62,7 +65,7 @@ python -m scenario_pipeline validate-rl
 gpudrive_cuda/scripts/setup_uv_env.sh
 gpudrive_cuda/scripts/run_nuplan_demo.sh
 
-如果根目录缺少 pyproject.toml、uv.lock 或 UV 环境脚本，根据当前代码的真实 import 补充最小环境。当前 simulator 阶段至少需要 Python 3.10、CMake、Ninja、Matplotlib 和 Pillow。不要进行无关依赖升级。
+如果根目录缺少pyproject.toml、uv.lock或UV环境脚本，根据当前代码的真实import补充最小环境。当前simulator阶段至少需要Python 3.10、CMake、Ninja、Matplotlib、Pillow和imageio-ffmpeg。不要进行无关依赖升级。
 
 第二阶段：定位真实 nuPlan 数据
 
@@ -219,7 +222,7 @@ uv run --frozen cmake --build gpudrive_cuda/build -j
 gpudrive_cuda/build/runtime_loader_test "$RUNTIME_SCENE_DIR"
 gpudrive_cuda/build/simulator_integration_test "$RUNTIME_SCENE_DIR"
 
-然后运行 drive_sim_cli 和 gpudrive_cuda/tools/render_trace.py，生成 CSV、JSON、GIF 和 PNG。
+然后运行 drive_sim_cli 和 gpudrive_cuda/tools/render_trace.py，生成CSV、JSON、GIF、MP4和PNG。
 
 第七阶段：验收
 
@@ -230,7 +233,7 @@ gpudrive_cuda/build/simulator_integration_test "$RUNTIME_SCENE_DIR"
 - CUDA rollout 完成且没有 CUDA error
 - trace.csv 存在且非空
 - summary.json 是合法 JSON
-- rollout.gif 和 final_frame.png 能被 Pillow 打开
+- rollout.gif、rollout.mp4 和 final_frame.png 均非空且可读取
 - 至少一辆有效车辆的终点位置不同于起点
 - 状态和动作没有 NaN/Inf
 - CSV 的 world、step、agent_slot 排序合理
@@ -262,12 +265,13 @@ git diff --stat
 
 ## 人工验收清单
 
-工作站 Codex 完成后，至少应提供以下四个文件：
+工作站 Codex 完成后，至少应提供以下五个文件：
 
 ```text
 <SIM_OUTPUT_DIR>/trace.csv
 <SIM_OUTPUT_DIR>/summary.json
 <SIM_OUTPUT_DIR>/rollout.gif
+<SIM_OUTPUT_DIR>/rollout.mp4
 <SIM_OUTPUT_DIR>/final_frame.png
 ```
 

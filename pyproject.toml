@@ -5,6 +5,7 @@ description = "Reproducible development environment for the standalone CUDA nuPl
 requires-python = ">=3.10,<3.11"
 dependencies = [
     "cmake>=3.24,<4",
+    "imageio-ffmpeg>=0.6,<1",
     "matplotlib>=3.8,<4",
     "ninja>=1.11,<2",
     "pillow>=10,<13",

@@ -6,10 +6,38 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from gpudrive_cuda.tools.render_trace import load_trace, runtime_for_world, vehicle_corners
+from gpudrive_cuda.tools.render_trace import (
+    TraceRow,
+    interpolate_trace_frame,
+    interpolate_yaw,
+    load_trace,
+    runtime_for_world,
+    sample_times,
+    vehicle_corners,
+)
 
 
 class RenderTraceTest(unittest.TestCase):
+    @staticmethod
+    def trace_row(step: int, x: float, yaw: float) -> TraceRow:
+        return TraceRow(
+            world=0,
+            step=step,
+            agent_slot=0,
+            agent_id="ego",
+            valid=True,
+            control_mode="auto",
+            x=x,
+            y=0.0,
+            yaw=yaw,
+            vx=1.0,
+            vy=0.0,
+            collided_vehicle=False,
+            collided_road=False,
+            offroad=False,
+            reached_goal=False,
+        )
+
     def test_vehicle_corners_preserve_dimensions(self) -> None:
         corners = vehicle_corners(2.0, 3.0, 0.0, 4.0, 2.0)
         self.assertEqual(corners, [(4.0, 4.0), (4.0, 2.0), (0.0, 2.0), (0.0, 4.0)])
@@ -57,6 +85,33 @@ class RenderTraceTest(unittest.TestCase):
                 scene.mkdir()
                 (scene / "manifest.json").write_text("{}", encoding="utf-8")
             self.assertEqual(runtime_for_world(root, 3).name, "b")
+
+    def test_yaw_interpolation_uses_shortest_arc(self) -> None:
+        value = interpolate_yaw(math.radians(179.0), math.radians(-179.0), 0.5)
+        self.assertAlmostEqual(abs(value), math.pi, places=6)
+
+    def test_trace_interpolation_blends_state_and_uses_nearest_event(self) -> None:
+        left = self.trace_row(0, 0.0, 0.0)
+        right = TraceRow(
+            **{
+                **self.trace_row(1, 2.0, math.pi / 2.0).__dict__,
+                "collided_vehicle": True,
+            }
+        )
+        frames = {0: [left], 1: [right]}
+        result = interpolate_trace_frame(frames, 0.75)[0]
+        self.assertAlmostEqual(result.x, 1.5)
+        self.assertAlmostEqual(result.yaw, 3.0 * math.pi / 8.0)
+        self.assertTrue(result.collided_vehicle)
+
+    def test_ten_second_frame_schedule_has_exact_counts(self) -> None:
+        gif_times = sample_times(10.0, 10)
+        mp4_times = sample_times(10.0, 20)
+        self.assertEqual(len(gif_times), 100)
+        self.assertEqual(len(mp4_times), 200)
+        self.assertEqual(gif_times[0], 0.0)
+        self.assertAlmostEqual(gif_times[-1], 9.9)
+        self.assertAlmostEqual(mp4_times[-1], 9.95)
 
 
 if __name__ == "__main__":

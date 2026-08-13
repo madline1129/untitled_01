@@ -53,26 +53,34 @@ uv run --frozen python "${PROJECT_ROOT}/tools/render_trace.py" \
     --runtime "${RUNTIME_PATH}" \
     --trace "${TEST_OUTPUT_DIR}/trace.csv" \
     --output "${TEST_OUTPUT_DIR}/rollout.gif" \
+    --mp4-output "${TEST_OUTPUT_DIR}/rollout.mp4" \
+    --duration 1 \
     --final-png "${TEST_OUTPUT_DIR}/final_frame.png"
 test -s "${TEST_OUTPUT_DIR}/rollout.gif"
+test -s "${TEST_OUTPUT_DIR}/rollout.mp4"
 test -s "${TEST_OUTPUT_DIR}/final_frame.png"
-uv run --frozen python - "${TEST_OUTPUT_DIR}/trace.csv" "${TEST_OUTPUT_DIR}/rollout.gif" <<'PY'
-import csv
+uv run --frozen python - "${TEST_OUTPUT_DIR}/rollout.gif" "${TEST_OUTPUT_DIR}/rollout.mp4" <<'PY'
 import sys
+from collections import Counter
 
+import imageio_ffmpeg
 from PIL import Image
 
-with open(sys.argv[1], newline="", encoding="utf-8") as stream:
-    steps = {
-        int(row["step"])
-        for row in csv.DictReader(stream)
-        if row["world"] == "0"
-    }
-with Image.open(sys.argv[2]) as animation:
-    frames = animation.n_frames
-if frames != len(steps):
-    raise SystemExit(f"GIF frame count mismatch: frames={frames}, steps={len(steps)}")
-print(f"[test] GIF frames: {frames}")
+with Image.open(sys.argv[1]) as animation:
+    if animation.size != (1600, 900) or animation.n_frames != 10:
+        raise SystemExit(
+            f"unexpected GIF: size={animation.size}, frames={animation.n_frames}"
+        )
+    animation.seek(animation.n_frames - 1)
+    rgb = animation.convert("RGB")
+    pixels = rgb.get_flattened_data() if hasattr(rgb, "get_flattened_data") else rgb.getdata()
+    colors = Counter(pixels)
+    if colors[(8, 124, 240)] < 5 or colors[(255, 122, 18)] < 5:
+        raise SystemExit("GIF does not contain visible ego and traffic agents")
+frames, seconds = imageio_ffmpeg.count_frames_and_secs(sys.argv[2])
+if frames != 20 or abs(seconds - 1.0) > 0.1:
+    raise SystemExit(f"unexpected MP4: frames={frames}, duration={seconds}")
+print(f"[test] GIF frames: 10; MP4 frames: {frames}; duration: {seconds:.3f}s")
 PY
 
 echo "[test] CUDA simulator integration ok"
