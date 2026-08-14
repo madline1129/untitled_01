@@ -9,6 +9,7 @@ uv sync --frozen --group train
 
 TORCH_CMAKE_PREFIX="$(uv run --frozen --group train python -c 'import torch; print(torch.utils.cmake_prefix_path)')"
 PYBIND11_CMAKE_DIR="$(uv run --frozen --group train python -c 'import pybind11; print(pybind11.get_cmake_dir())')"
+PYTHON_EXECUTABLE="$(uv run --frozen --group train python -c 'import sys; print(sys.executable)')"
 
 CMAKE_ARGS=(
     -S "${ROOT_DIR}/gpudrive_cuda"
@@ -17,14 +18,15 @@ CMAKE_ARGS=(
     -DCMAKE_BUILD_TYPE=Release
     -DBUILD_TESTING=ON
     -DBUILD_TORCH_BINDINGS=ON
+    "-DPython_EXECUTABLE=${PYTHON_EXECUTABLE}"
     "-DCMAKE_PREFIX_PATH=${TORCH_CMAKE_PREFIX};${PYBIND11_CMAKE_DIR}"
 )
 if [[ -n "${CMAKE_CUDA_ARCHITECTURES:-}" ]]; then
     CMAKE_ARGS+=("-DCMAKE_CUDA_ARCHITECTURES=${CMAKE_CUDA_ARCHITECTURES}")
 fi
 
-cmake "${CMAKE_ARGS[@]}"
-cmake --build "${BUILD_DIR}" --parallel
+uv run --frozen --group train cmake "${CMAKE_ARGS[@]}"
+uv run --frozen --group train cmake --build "${BUILD_DIR}" --parallel
 
 echo "[ok] Torch extension: ${BUILD_DIR}/python/gpudrive_cuda_torch"
 echo "export PYTHONPATH=${BUILD_DIR}/python:${ROOT_DIR}"

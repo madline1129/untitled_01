@@ -49,6 +49,7 @@ set_target_properties(drive_sim_cli PROPERTIES
 )
 
 if(BUILD_TORCH_BINDINGS)
+    find_package(Python COMPONENTS Interpreter Development.Module REQUIRED)
     find_package(Torch REQUIRED)
     find_package(pybind11 CONFIG REQUIRED)
     find_library(TORCH_PYTHON_LIBRARY torch_python
@@ -57,6 +58,14 @@ if(BUILD_TORCH_BINDINGS)
         REQUIRED
     )
     separate_arguments(TORCH_CXX_FLAGS_LIST NATIVE_COMMAND "${TORCH_CXX_FLAGS}")
+
+    # Torch's prebuilt wheels use a specific libstdc++ ABI.  Every C++/CUDA
+    # target linked into the Python module must use the same ABI, otherwise
+    # filesystem/string symbols from the static simulator libraries remain
+    # unresolved when Python imports the extension.
+    target_compile_options(runtime_scene PRIVATE ${TORCH_CXX_FLAGS_LIST})
+    target_compile_options(drive_simulator PRIVATE ${TORCH_CXX_FLAGS_LIST})
+    target_compile_options(drive_sim_cli PRIVATE ${TORCH_CXX_FLAGS_LIST})
 
     pybind11_add_module(gpudrive_cuda_torch MODULE
         src/torch_bindings.cu
@@ -88,4 +97,9 @@ if(BUILD_TESTING)
     add_executable(simulator_integration_test tests/simulator_integration_test.cu)
     target_link_libraries(simulator_integration_test PRIVATE drive_simulator runtime_scene)
     set_target_properties(simulator_integration_test PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+
+    if(BUILD_TORCH_BINDINGS)
+        target_compile_options(runtime_loader_test PRIVATE ${TORCH_CXX_FLAGS_LIST})
+        target_compile_options(simulator_integration_test PRIVATE ${TORCH_CXX_FLAGS_LIST})
+    endif()
 endif()
